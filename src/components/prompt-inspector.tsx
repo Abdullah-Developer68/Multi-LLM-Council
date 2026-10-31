@@ -171,7 +171,7 @@ export function PromptInspector({ turnId, agentId }: PromptInspectorProps) {
               >
                 <Layers size={13} color={viewMode === 'structured' ? Colors.textPrimary : Colors.textMuted} />
                 <Text style={[styles.modeTabText, viewMode === 'structured' && styles.modeTabTextActive]}>
-                  Structured Blueprint
+                  Structured
                 </Text>
               </Pressable>
               <Pressable
@@ -180,20 +180,26 @@ export function PromptInspector({ turnId, agentId }: PromptInspectorProps) {
               >
                 <Code2 size={13} color={viewMode === 'raw' ? Colors.textPrimary : Colors.textMuted} />
                 <Text style={[styles.modeTabText, viewMode === 'raw' && styles.modeTabTextActive]}>
-                  Raw Directive
+                  Raw
                 </Text>
               </Pressable>
             </View>
 
-            <Pressable onPress={handleCopy} style={styles.copyAction} hitSlop={6}>
+            <Pressable
+              onPress={handleCopy}
+              style={({ pressed }) => [
+                styles.copyButton,
+                copied && styles.copyButtonCopied,
+                pressed && styles.pressed,
+              ]}
+              hitSlop={8}
+              accessibilityLabel="Copy prompt"
+            >
               {copied ? (
-                <Check size={13} color={Colors.success} />
+                <Check size={14} color={Colors.success} />
               ) : (
-                <Copy size={13} color={Colors.textSecondary} />
+                <Copy size={14} color={Colors.textSecondary} />
               )}
-              <Text style={[styles.copyActionText, copied && { color: Colors.success }]}>
-                {copied ? 'Copied' : 'Copy'}
-              </Text>
             </Pressable>
           </View>
 
@@ -371,17 +377,20 @@ const styles = StyleSheet.create({
   },
   modeTabs: {
     flexDirection: 'row',
-    gap: 6,
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: Colors.surfaceHigh,
     padding: 3,
     borderRadius: Radius.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   modeTab: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: Radius.xs,
   },
   modeTabActive: {
@@ -396,19 +405,19 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontWeight: '700',
   },
-  copyAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: Radius.xs,
+  copyButton: {
+    width: 28,
+    height: 28,
+    borderRadius: Radius.sm,
     backgroundColor: Colors.surfaceHigh,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  copyActionText: {
-    color: Colors.textSecondary,
-    fontSize: 11,
-    fontWeight: '600',
+  copyButtonCopied: {
+    borderColor: Colors.success,
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
   },
   sectionsList: {
     gap: 10,

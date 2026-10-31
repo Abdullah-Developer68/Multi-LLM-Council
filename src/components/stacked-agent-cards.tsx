@@ -528,6 +528,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: Radius.md,
     backgroundColor: Colors.surfaceHigh,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   copyText: { color: Colors.textSecondary, fontSize: 12, fontWeight: '600' },
   copyTextDone: { color: Colors.primaryLight },
