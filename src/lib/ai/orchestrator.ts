@@ -12,8 +12,6 @@ import {
   type DiscussionRoundItem,
 } from '../../db/schema';
 import { eq } from 'drizzle-orm';
-import { generateText } from 'ai';
-import { createOpenAI } from '@ai-sdk/openai';
 
 export interface OrchestrationResult {
   threadId: string;
@@ -27,13 +25,12 @@ export interface OrchestrationResult {
   rankedAgentIds: string[];
 }
 
-let isOpenRouterRateLimited = false;
-let rateLimitResetTime = 0;
-
 /**
- * Invokes OpenRouter using Vercel AI SDK (with fallback retry)
+ * Invokes OpenRouter directly to guarantee genuine live AI generation.
+ * Handles primary models, fallbacks, reasoning tokens, and generous 65s timeout.
  */
-async function callAgentWithVercelAISDK(
+async function callAgentWithOpenRouter(
+  agentName: string,
   model: string,
   fallbackModel: string | undefined,
   systemPrompt: string,
@@ -41,238 +38,58 @@ async function callAgentWithVercelAISDK(
   apiKey: string,
   temperature = 0.3
 ): Promise<string> {
-  // If we recently hit 429 rate limit, short-circuit to fast high-fidelity generator
-  if (isOpenRouterRateLimited && Date.now() < rateLimitResetTime) {
-    throw new Error('OpenRouter rate limit reached (HTTP 429). Short-circuiting.');
-  }
-
-  const openrouter = createOpenAI({
-    baseURL: 'https://openrouter.ai/api/v1',
-    apiKey,
-    headers: {
-      'HTTP-Referer': 'http://localhost:8081',
-      'X-Title': 'TRA Multi-Agent System',
-    },
-  });
-
   const modelsToTry = [model];
   if (fallbackModel && fallbackModel !== model) {
     modelsToTry.push(fallbackModel);
   }
+  if (!modelsToTry.includes('nvidia/nemotron-3.5-lightning:free')) {
+    modelsToTry.push('nvidia/nemotron-3.5-lightning:free');
+  }
+
+  let lastError: any = null;
 
   for (const m of modelsToTry) {
     try {
-      const response = await generateText({
-        model: openrouter.chat(m),
-        system: systemPrompt,
-        prompt: userMessage,
-        temperature,
-        maxOutputTokens: 1500,
-        abortSignal: AbortSignal.timeout(9000),
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'http://localhost:8081',
+          'X-Title': 'TRA Multi-Agent Council',
+        },
+        body: JSON.stringify({
+          model: m,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage },
+          ],
+          temperature,
+          max_tokens: 3000,
+        }),
+        signal: AbortSignal.timeout(65000),
       });
 
-      if (response.text && response.text.trim().length > 0) {
-        isOpenRouterRateLimited = false;
-        return response.text.trim();
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`OpenRouter HTTP ${response.status} on model ${m}: ${errorText}`);
+      }
+
+      const data = await response.json();
+      const msg = data.choices?.[0]?.message;
+      const text = (msg?.content || msg?.reasoning || '').trim();
+
+      if (text.length > 0) {
+        return text;
       }
     } catch (err: any) {
-      const errStr = String(err?.message || err);
-      if (errStr.includes('429') || errStr.includes('quota') || errStr.includes('rate limit')) {
-        isOpenRouterRateLimited = true;
-        rateLimitResetTime = Date.now() + 5 * 60 * 1000;
-        throw new Error('Rate limit exceeded (HTTP 429) on OpenRouter');
-      }
+      lastError = err;
+      console.warn(`[OpenRouter] ${agentName} (${m}) failed:`, err?.message || err);
       continue;
     }
   }
 
-  throw new Error(`OpenRouter models failed for: ${modelsToTry.join(', ')}`);
-}
-
-/**
- * Intelligent high-fidelity answer generation when OpenRouter is rate-limited or offline.
- */
-function generateIntelligentAgentResponse(
-  agent: CouncilAgentConfig,
-  rawPrompt: string,
-  peerOptimization: { optimizerId: string; optimizerName: string; optimizedPrompt: string },
-  index: number
-): AgentResponseItem {
-  const trimmed = rawPrompt.trim();
-  const lower = trimmed.toLowerCase();
-
-  let answer = '';
-  const reasoningSteps: string[] = [
-    `Received and decoded prompt optimized by ${peerOptimization.optimizerName}`,
-    `Enforced Chain-of-Thought (CoT) and boundary constraints`,
-  ];
-
-  // 1. Math / Arithmetic evaluation
-  const mathMatch =
-    trimmed.match(/^what\s+is\s+([0-9\s\+\-\*\/\\^\(\)\.\%]+)\??$/i) ||
-    trimmed.match(/^([0-9\s\+\-\*\/\\^\(\)\.\%]+)\s*=?\??$/);
-  if (mathMatch) {
-    const expr = mathMatch[1].trim();
-    try {
-      const sanitized = expr.replace(/[^0-9\+\-\*\/\\.\(\)\s]/g, '');
-      const calculated = Function(`"use strict"; return (${sanitized})`)();
-
-      if (agent.id === 'nemotron-lightning') {
-        answer = `### Formal Mathematical Derivation
-
-**Evaluated Expression**: \`${expr}\`
-
-#### 1. Chain-of-Thought Reasoning
-- **Initial Proposition**: Evaluate the arithmetic operation defined over $\\mathbb{Z}$.
-- **Computation**: Applying standard operator precedence:
-  $$${expr} = ${calculated}$$
-
-#### 2. Verification & Boundary Conditions
-- The result is well-defined with zero indeterminate forms.
-- No division by zero or domain violations encountered.
-
----
-### Final Answer: **${calculated}**`;
-      } else if (agent.id === 'north-mini-code') {
-        answer = `### Algorithmic Evaluation & Implementation
-
-**Expression**: \`${expr}\`  
-**Computed Result**: \`${calculated}\`
-
-#### Execution Breakdown
-\`\`\`typescript
-// Verifiable algorithmic computation
-function evaluate(): number {
-  return ${expr}; // Evaluates strictly to ${calculated}
-}
-console.log(evaluate()); // => ${calculated}
-\`\`\`
-
-- **Time Complexity**: $\\mathcal{O}(1)$ CPU cycle.
-- **Space Complexity**: $\\mathcal{O}(1)$ register allocation.
-- **Result**: **${calculated}**`;
-      } else {
-        answer = `### Comprehensive Analysis
-
-The solution to the query **${expr}** is **${calculated}**.
-
-1. **Direct Calculation**: Evaluating the terms yields **${calculated}**.
-2. **Context & Verification**: Consistent across discrete mathematics, floating point, and integer arithmetic.
-3. **Definitive Conclusion**: **${calculated}**`;
-      }
-    } catch {
-      // Fall through to general response
-    }
-  }
-
-  // 2. Coding / Technical inquiry
-  if (
-    !answer &&
-    (lower.includes('code') ||
-      lower.includes('function') ||
-      lower.includes('implement') ||
-      lower.includes('typescript') ||
-      lower.includes('python') ||
-      lower.includes('react') ||
-      lower.includes('expo') ||
-      lower.includes('algo'))
-  ) {
-    if (agent.id === 'north-mini-code') {
-      answer = `### Production Implementation & Architecture
-
-*Adhering to directives engineered by ${peerOptimization.optimizerName}*
-
-#### 1. Architecture & Design Principles
-- Employs modular separation of concerns with strong type safety.
-- Handles edge cases, boundary conditions, and potential memory hazards.
-
-#### 2. Implementation
-\`\`\`typescript
-/**
- * Solution for: ${trimmed}
- */
-export class SolutionEngine {
-  public execute(): { success: boolean; data: string; timestamp: number } {
-    return {
-      success: true,
-      data: "Executed with rigorous precision",
-      timestamp: Date.now(),
-    };
-  }
-}
-\`\`\`
-
-#### 3. Complexity & Boundary Analysis
-- **Time Complexity**: Optimal runtime bounds $\\mathcal{O}(n)$.
-- **Error Handling**: Graceful degradation on invalid input parameters.`;
-    } else if (agent.id === 'nemotron-lightning') {
-      answer = `### Algorithmic Specification & Formal Proof
-
-*Executing prompt optimized by ${peerOptimization.optimizerName}*
-
-#### 1. Deconstruction of the Problem
-The user request requires constructing a robust solution for:
-> "${trimmed}"
-
-#### 2. Formal Invariants
-- **Preconditions**: Validated inputs, non-null parameters.
-- **Postconditions**: Correct execution with zero side-effects.
-
-#### 3. Core Strategy
-1. Establish verifiable state transitions.
-2. Ensure deterministic termination and memory isolation.
-3. Validate against boundary conditions and concurrent race hazards.`;
-    } else {
-      answer = `### Full-Spectrum Technical Synthesis
-
-*Synthesized under guidelines prepared by ${peerOptimization.optimizerName}*
-
-#### 1. Strategic Overview
-When solving "${trimmed}", optimal implementations balance maintainability, execution latency, and idiomatic clarity.
-
-#### 2. Key Pillars
-- **Type Safety & Contracts**: Strict adherence to explicit schemas.
-- **Fault Tolerance**: Comprehensive exception containment.
-- **Extensibility**: Clean abstraction boundaries.`;
-    }
-  }
-
-  // 3. General Inquiry
-  if (!answer) {
-    answer = `### Structured Solution by ${agent.name}
-
-*Answering directive engineered by peer model: **${peerOptimization.optimizerName}***
-
-#### 1. Deconstruction of the User Objective
-Addressing the primary user task:
-> "${trimmed}"
-
-#### 2. Step-by-Step Reasoning (Chain-of-Thought)
-1. **Core Problem Formulation**: Clarifying explicit objectives and boundaries.
-2. **Methodology**: Applying structured deductive logic to isolate verifiable facts.
-3. **Execution**: Synthesizing an accurate, high-impact solution tailored to the requirements.
-
-#### 3. Definitive Resolution
-The comprehensive solution for your inquiry emphasizes accuracy, verified principles, and practical utility. All requirements set forth in the prompt optimized by **${peerOptimization.optimizerName}** have been verified and fulfilled.`;
-  }
-
-  reasoningSteps.push(`Delivered complete solution matching ${agent.name} specialization`);
-
-  return {
-    agentId: agent.id,
-    agentName: agent.name,
-    model: agent.model,
-    role: `AI Specialist (${agent.provider})`,
-    avatarIcon: agent.iconName,
-    answer,
-    accuracyScore: 96 - index * 3,
-    confidence: 92,
-    reasoningSteps,
-    rank: index + 1,
-    optimizedByAgentId: peerOptimization.optimizerId,
-    optimizedByAgentName: peerOptimization.optimizerName,
-    receivedPrompt: peerOptimization.optimizedPrompt,
-  };
+  throw new Error(`Unable to generate response for ${agentName}: ${lastError?.message || 'All models failed.'}`);
 }
 
 export async function runMultiAgentPipeline(
@@ -281,6 +98,10 @@ export async function runMultiAgentPipeline(
   customApiKey?: string
 ): Promise<OrchestrationResult> {
   const apiKey = customApiKey || process.env.OPENROUTER_API_KEY || '';
+
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY is missing from environment. Please configure it in .env');
+  }
 
   // 1. Thread Management
   const activeThreadId = threadId || `thread_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -303,7 +124,7 @@ export async function runMultiAgentPipeline(
     console.warn('DB notice (thread init):', err);
   }
 
-  // 2. Stage 1: Peer Prompt Optimization Ring (3 Active Free Models)
+  // 2. Stage 1: Peer Prompt Optimization Ring (Live AI Models)
   const agentCount = COUNCIL_AGENTS.length;
   const optimizationsByModel = await Promise.all(
     COUNCIL_AGENTS.map(async (agent) => {
@@ -319,55 +140,69 @@ export async function runMultiAgentPipeline(
 
   const optimization = await optimizeUserPrompt(userPrompt, apiKey);
 
-  // 3. Stage 2: Cross-Model Execution with Vercel AI SDK
+  // 3. Stage 2: Cross-Model Execution with Live AI Models
   // Circular ring handoff: Model i receives prompt prepared for it by peer (i - 1 + count) % count
   const agentTasks = COUNCIL_AGENTS.map(async (agent: CouncilAgentConfig, index: number) => {
     const peerIndex = (index - 1 + agentCount) % agentCount;
     const peerOptimization = optimizationsByModel[peerIndex];
 
-    if (apiKey && !isOpenRouterRateLimited) {
-      try {
-        const responseText = await callAgentWithVercelAISDK(
-          agent.model,
-          agent.fallbackModel,
-          `You are ${agent.name}, an intelligent, capable, and accurate AI assistant. You have been handed an optimized prompt prepared specifically for you by ${peerOptimization.optimizerName}. Answer thoroughly and accurately.`,
-          peerOptimization.optimizedPrompt,
-          apiKey
-        );
+    try {
+      const responseText = await callAgentWithOpenRouter(
+        agent.name,
+        agent.model,
+        agent.fallbackModel,
+        `You are ${agent.name}, an authoritative AI specialist in the Multi-Agent Council. You have been assigned an execution directive prepared specifically for you by peer model ${peerOptimization.optimizerName}.
+Execute the user task thoroughly, adhering strictly to the provided cognitive persona, reasoning protocol, and constraints.
+Do NOT repeat the prompt template or XML tags. Output your direct, high-value, and comprehensive solution to the user.`,
+        peerOptimization.optimizedPrompt,
+        apiKey
+      );
 
-        return {
-          agentId: agent.id,
-          agentName: agent.name,
-          model: agent.model,
-          role: `AI Specialist (${agent.provider})`,
-          avatarIcon: agent.iconName,
-          answer: responseText,
-          accuracyScore: 97 - index * 3,
-          confidence: 94,
-          reasoningSteps: [
-            `Received prompt optimized by ${peerOptimization.optimizerName}`,
-            `Synthesized verified response addressing all constraints`,
-          ],
-          rank: index + 1,
-          optimizedByAgentId: peerOptimization.optimizerId,
-          optimizedByAgentName: peerOptimization.optimizerName,
-          receivedPrompt: peerOptimization.optimizedPrompt,
-        } as AgentResponseItem;
-      } catch {
-        // Fall back to intelligent generator
-      }
+      return {
+        agentId: agent.id,
+        agentName: agent.name,
+        model: agent.model,
+        role: `AI Specialist (${agent.provider})`,
+        avatarIcon: agent.iconName,
+        answer: responseText,
+        accuracyScore: 97 - index * 3,
+        confidence: 94,
+        reasoningSteps: [
+          `Received and executed prompt engineered by ${peerOptimization.optimizerName}`,
+          `Synthesized live AI response addressing all domain constraints`,
+        ],
+        rank: index + 1,
+        optimizedByAgentId: peerOptimization.optimizerId,
+        optimizedByAgentName: peerOptimization.optimizerName,
+        receivedPrompt: peerOptimization.optimizedPrompt,
+      } as AgentResponseItem;
+    } catch (err: any) {
+      console.error(`Agent ${agent.name} failed:`, err);
+      return {
+        agentId: agent.id,
+        agentName: agent.name,
+        model: agent.model,
+        role: `AI Specialist (${agent.provider})`,
+        avatarIcon: agent.iconName,
+        answer: `### Live Model Error\n\nUnable to generate response from **${agent.name}** (${agent.model}):\n> ${err.message || err}\n\nPlease check your OpenRouter API key status or connection.`,
+        accuracyScore: 50,
+        confidence: 0,
+        reasoningSteps: [`Encountered connection error with ${agent.model}`],
+        rank: index + 1,
+        optimizedByAgentId: peerOptimization.optimizerId,
+        optimizedByAgentName: peerOptimization.optimizerName,
+        receivedPrompt: peerOptimization.optimizedPrompt,
+      } as AgentResponseItem;
     }
-
-    // High-fidelity fallback generation that directly addresses the user query
-    return generateIntelligentAgentResponse(agent, userPrompt, peerOptimization, index);
   });
 
   const rawAgentResponses = await Promise.all(agentTasks);
 
   // 4. Consensus Synthesis
-  const topAgent = rawAgentResponses[0];
+  const successfulAgents = rawAgentResponses.filter((a) => !a.answer.startsWith('### Live Model Error'));
+  const topAgent = successfulAgents[0] || rawAgentResponses[0];
   const consensusSolution = topAgent?.answer || 'No response produced.';
-  const consensusRationale = `Synthesized after circular cross-model prompt optimization across ${agentCount} AI models (Nemotron 3.5 Lightning, Cohere North Mini, Nemotron Ultra).`;
+  const consensusRationale = `Synthesized after circular cross-model prompt optimization across ${agentCount} AI models (${COUNCIL_AGENTS.map((a) => a.name).join(', ')}).`;
 
   const discussionRounds: DiscussionRoundItem[] = [
     {

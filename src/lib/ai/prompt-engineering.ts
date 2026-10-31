@@ -51,45 +51,65 @@ export async function optimizePromptWithModel(
     return createAgentSpecificAlgorithmicOptimization(rawPrompt, modelName, modelId);
   }
 
-  try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost:8081',
-        'X-Title': 'TRA Multi-Agent Council',
-      },
-      body: JSON.stringify({
-        model: modelId,
-        messages: [
-          {
-            role: 'system',
-            content: `You are ${modelName}, a lead AI architect. Your task is to analyze the user's prompt, sharpen it, apply Chain-of-Thought directives, add strict constraints, and return an optimized prompt for another AI model to execute. Respond with ONLY the improved prompt text. Keep it direct, structured, and rigorous.`,
-          },
-          {
-            role: 'user',
-            content: `Optimize and sharpen this prompt for another AI model:\n\n"""${rawPrompt}"""`,
-          },
-        ],
-        temperature: 0.2,
-        max_tokens: 700,
-      }),
-      signal: AbortSignal.timeout(6000),
-    });
+  const modelsToTry = [modelId];
+  if (modelId !== 'nvidia/nemotron-3.5-lightning:free') {
+    modelsToTry.push('nvidia/nemotron-3.5-lightning:free');
+  }
 
-    if (response.ok) {
-      const data: any = await response.json();
-      const content = (data?.choices?.[0]?.message?.content || '').trim();
-      if (content.length > 20) {
-        return {
-          optimizedPrompt: content,
-          summary: `Reframed with Chain-of-Thought and structural constraints by ${modelName}`,
-        };
+  for (const m of modelsToTry) {
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'http://localhost:8081',
+          'X-Title': 'TRA Multi-Agent Council',
+        },
+        body: JSON.stringify({
+          model: m,
+          messages: [
+            {
+              role: 'system',
+              content: `You are ${modelName}, a lead AI architect. Your task is to analyze the user prompt, sharpen it, apply Chain-of-Thought directives, add strict constraints, and return an optimized prompt for another AI model to execute.
+Format your response using these XML-like tags:
+<role>Designated Persona and Domain Authority</role>
+<objective>Clear execution goal</objective>
+<user_task>${rawPrompt}</user_task>
+<execution_protocol>
+1. Step 1: Sequential reasoning directive
+2. Step 2: Verification step
+</execution_protocol>
+<constraints>
+- Strict boundary or negative constraint 1
+- Strict boundary or negative constraint 2
+</constraints>`,
+            },
+            {
+              role: 'user',
+              content: `Optimize and sharpen this prompt for another AI model:\n\n"""${rawPrompt}"""`,
+            },
+          ],
+          temperature: 0.2,
+          max_tokens: 1600,
+        }),
+        signal: AbortSignal.timeout(35000),
+      });
+
+      if (response.ok) {
+        const data: any = await response.json();
+        const msg = data?.choices?.[0]?.message;
+        const content = (msg?.content || msg?.reasoning || '').trim();
+        if (content.length > 30) {
+          return {
+            optimizedPrompt: content,
+            summary: `Reframed with Chain-of-Thought and structural constraints by ${modelName}`,
+          };
+        }
       }
+    } catch (err) {
+      console.warn(`Prompt optimization attempt failed with model ${m}:`, err);
     }
-  } catch {
-    // Gracefully fall back to agent-specific algorithmic optimization
   }
 
   return createAgentSpecificAlgorithmicOptimization(rawPrompt, modelName, modelId);
@@ -196,9 +216,9 @@ export async function optimizeUserPrompt(
               },
             ],
             temperature: 0.2,
-            max_tokens: 1000,
+            max_tokens: 1800,
           }),
-          signal: AbortSignal.timeout(6000),
+          signal: AbortSignal.timeout(30000),
         });
 
         if (!response.ok) continue;
