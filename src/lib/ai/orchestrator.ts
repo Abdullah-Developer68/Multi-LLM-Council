@@ -13,6 +13,7 @@ import {
 } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import { getOpenRouterApiKey } from './env';
+import { executeWithFreeModelRotation } from './model-rotation';
 
 export interface OrchestrationResult {
   threadId: string;
@@ -24,73 +25,6 @@ export interface OrchestrationResult {
   agentResponses: AgentResponseItem[];
   discussionRounds: DiscussionRoundItem[];
   rankedAgentIds: string[];
-}
-
-/**
- * Invokes OpenRouter directly to guarantee genuine live AI generation.
- * Handles primary models, fallbacks, reasoning tokens, and generous 65s timeout.
- */
-async function callAgentWithOpenRouter(
-  agentName: string,
-  model: string,
-  fallbackModel: string | undefined,
-  systemPrompt: string,
-  userMessage: string,
-  apiKey: string,
-  temperature = 0.3
-): Promise<string> {
-  const modelsToTry = [model];
-  if (fallbackModel && fallbackModel !== model) {
-    modelsToTry.push(fallbackModel);
-  }
-  if (!modelsToTry.includes('nvidia/nemotron-3.5-lightning:free')) {
-    modelsToTry.push('nvidia/nemotron-3.5-lightning:free');
-  }
-
-  let lastError: any = null;
-
-  for (const m of modelsToTry) {
-    try {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'http://localhost:8081',
-          'X-Title': 'TRA Multi-Agent Council',
-        },
-        body: JSON.stringify({
-          model: m,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userMessage },
-          ],
-          temperature,
-          max_tokens: 3000,
-        }),
-        signal: AbortSignal.timeout(65000),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`OpenRouter HTTP ${response.status} on model ${m}: ${errorText}`);
-      }
-
-      const data = await response.json();
-      const msg = data.choices?.[0]?.message;
-      const text = (msg?.content || msg?.reasoning || '').trim();
-
-      if (text.length > 0) {
-        return text;
-      }
-    } catch (err: any) {
-      lastError = err;
-      console.warn(`[OpenRouter] ${agentName} (${m}) failed:`, err?.message || err);
-      continue;
-    }
-  }
-
-  throw new Error(`Unable to generate response for ${agentName}: ${lastError?.message || 'All models failed.'}`);
 }
 
 export async function runMultiAgentPipeline(
@@ -148,29 +82,31 @@ export async function runMultiAgentPipeline(
     const peerOptimization = optimizationsByModel[peerIndex];
 
     try {
-      const responseText = await callAgentWithOpenRouter(
+      const result = await executeWithFreeModelRotation(
+        agent.id,
         agent.name,
-        agent.model,
-        agent.fallbackModel,
         `You are ${agent.name}, an authoritative AI specialist in the Multi-Agent Council. You have been assigned an execution directive prepared specifically for you by peer model ${peerOptimization.optimizerName}.
 Execute the user task thoroughly, adhering strictly to the provided cognitive persona, reasoning protocol, and constraints.
 Do NOT repeat the prompt template or XML tags. Output your direct, high-value, and comprehensive solution to the user.`,
         peerOptimization.optimizedPrompt,
-        apiKey
+        apiKey,
+        { maxTokens: 3000, timeoutMs: 65000 }
       );
 
       return {
         agentId: agent.id,
         agentName: agent.name,
-        model: agent.model,
+        model: result.modelUsed,
         role: `AI Specialist (${agent.provider})`,
         avatarIcon: agent.iconName,
-        answer: responseText,
+        answer: result.text,
         accuracyScore: 97 - index * 3,
         confidence: 94,
         reasoningSteps: [
           `Received and executed prompt engineered by ${peerOptimization.optimizerName}`,
-          `Synthesized live AI response addressing all domain constraints`,
+          result.wasRotated
+            ? `Auto-rotated to active free candidate: ${result.modelUsed}`
+            : `Synthesized live AI response addressing all domain constraints`,
         ],
         rank: index + 1,
         optimizedByAgentId: peerOptimization.optimizerId,

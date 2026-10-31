@@ -10,6 +10,12 @@
  */
 
 import { getOpenRouterApiKey } from './env';
+import {
+  executeWithFreeModelRotation,
+  isModelInCooldown,
+  markModelCooldown,
+  isExhaustionOrRateLimitError,
+} from './model-rotation';
 
 export interface PromptOptimizationResult {
   originalPrompt: string;
@@ -40,7 +46,8 @@ Respond strictly in valid JSON matching this schema:
 }`;
 
 /**
- * Have a specific AI model optimize the prompt from its own stance.
+ * Have a specific AI model optimize the prompt from its own stance,
+ * automatically rotating through free models if rate limits or quota issues occur.
  */
 export async function optimizePromptWithModel(
   rawPrompt: string,
@@ -53,27 +60,11 @@ export async function optimizePromptWithModel(
     return createAgentSpecificAlgorithmicOptimization(rawPrompt, modelName, modelId);
   }
 
-  const modelsToTry = [modelId];
-  if (modelId !== 'nvidia/nemotron-3.5-lightning:free') {
-    modelsToTry.push('nvidia/nemotron-3.5-lightning:free');
-  }
-
-  for (const m of modelsToTry) {
-    try {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'http://localhost:8081',
-          'X-Title': 'TRA Multi-Agent Council',
-        },
-        body: JSON.stringify({
-          model: m,
-          messages: [
-            {
-              role: 'system',
-              content: `You are ${modelName}, a lead AI architect. Your task is to analyze the user prompt, sharpen it, apply Chain-of-Thought directives, add strict constraints, and return an optimized prompt for another AI model to execute.
+  try {
+    const result = await executeWithFreeModelRotation(
+      modelId,
+      modelName,
+      `You are ${modelName}, a lead AI architect. Your task is to analyze the user prompt, sharpen it, apply Chain-of-Thought directives, add strict constraints, and return an optimized prompt for another AI model to execute.
 Format your response using these XML-like tags:
 <role>Designated Persona and Domain Authority</role>
 <objective>Clear execution goal</objective>
@@ -86,32 +77,21 @@ Format your response using these XML-like tags:
 - Strict boundary or negative constraint 1
 - Strict boundary or negative constraint 2
 </constraints>`,
-            },
-            {
-              role: 'user',
-              content: `Optimize and sharpen this prompt for another AI model:\n\n"""${rawPrompt}"""`,
-            },
-          ],
-          temperature: 0.2,
-          max_tokens: 1600,
-        }),
-        signal: AbortSignal.timeout(35000),
-      });
+      `Optimize and sharpen this prompt for another AI model:\n\n"""${rawPrompt}"""`,
+      token,
+      { maxTokens: 1600, timeoutMs: 35000, temperature: 0.2 }
+    );
 
-      if (response.ok) {
-        const data: any = await response.json();
-        const msg = data?.choices?.[0]?.message;
-        const content = (msg?.content || msg?.reasoning || '').trim();
-        if (content.length > 30) {
-          return {
-            optimizedPrompt: content,
-            summary: `Reframed with Chain-of-Thought and structural constraints by ${modelName}`,
-          };
-        }
-      }
-    } catch (err) {
-      console.warn(`Prompt optimization attempt failed with model ${m}:`, err);
+    if (result.text && result.text.length > 30) {
+      return {
+        optimizedPrompt: result.text,
+        summary: `Reframed with Chain-of-Thought and structural constraints by ${modelName}${
+          result.wasRotated ? ` (${result.modelUsed})` : ''
+        }`,
+      };
     }
+  } catch (err) {
+    console.warn(`Prompt optimization failed for ${modelName}, using algorithmic fallback:`, err);
   }
 
   return createAgentSpecificAlgorithmicOptimization(rawPrompt, modelName, modelId);
@@ -194,11 +174,16 @@ export async function optimizeUserPrompt(
   if (token) {
     const candidateModels = [
       'nvidia/nemotron-3.5-lightning:free',
-      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'nvidia/nemotron-3.5-super-vl:free',
       'cohere/north-mini-code:free',
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'openrouter/free',
     ];
 
-    for (const model of candidateModels) {
+    const availableCandidates = candidateModels.filter((m) => !isModelInCooldown(m));
+    const modelsToTry = availableCandidates.length > 0 ? availableCandidates : candidateModels;
+
+    for (const model of modelsToTry) {
       try {
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
@@ -223,7 +208,13 @@ export async function optimizeUserPrompt(
           signal: AbortSignal.timeout(30000),
         });
 
-        if (!response.ok) continue;
+        if (!response.ok) {
+          const errText = await response.text();
+          if (isExhaustionOrRateLimitError(errText, response.status)) {
+            markModelCooldown(model, `HTTP ${response.status}: ${errText.slice(0, 80)}`);
+          }
+          continue;
+        }
 
         const data: any = await response.json();
         const msg = data?.choices?.[0]?.message;
