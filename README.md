@@ -1,56 +1,96 @@
-# Welcome to your Expo app 👋
+# Multi LLM Council
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A universal full-stack application built with **Expo (React Native)**, **Drizzle ORM**, **Supabase PostgreSQL**, **Zustand**, and **Vercel AI SDK**.
 
-## Get started
+The system connects three specialized, active free AI models into a collaborative peer-to-peer ring deliberation council:
+1. **Nemotron 3.5 Lightning** (`nvidia/nemotron-3.5-lightning:free`)
+2. **Cohere North Mini** (`cohere/north-mini-code:free`)
+3. **Nemotron Ultra (550B)** (`nvidia/nemotron-3-ultra-550b-a55b:free`)
 
-1. Install dependencies
+---
 
-   ```bash
-   npm install
-   ```
+## 🏛️ Core Architecture & Features
 
-2. Start the app
+### 1. Peer-to-Peer Ring Prompt Optimization
+- **Ring Transformation**: Each AI model optimizes the raw user prompt from its unique stance.
+  - Model 0 optimizes the prompt for Model 1.
+  - Model 1 optimizes the prompt for Model 2.
+  - Model 2 optimizes the prompt for Model 0.
+- **Cross-Model Execution**: Each model answers using the prompt engineered specifically for it by its peer.
+- **Consensus Synthesis**: Synthesizes the council's collective solution with rationales and reasoning steps.
+- **Resilient Fallback**: Auto-mitigates rate limits (HTTP 429) to ensure zero downtime.
 
-   ```bash
-   npx expo start
-   ```
+### 2. Physical Stacked Cards Deck (Gesture Swipe)
+- **Deck of Cards**: AI replies are displayed in a stacked card deck where cards 2 and 3 visibly peek from underneath (offset by 10px/20px and scaled down), clearly signaling cards are stacked behind.
+- **Swipe Interactions**: Horizontal swipe gesture using `PanResponder` to discard/promote cards, with spring-back and jump indicators.
+- **Original Model Logos**: Authentic vector SVG brand logos sourced from the `dashboardicons.com` MCP server for NVIDIA and Cohere.
+- **Unified Dark Theme**: Consistent Slate/Zinc theme with high-contrast readability and clean neutral cards.
 
-In the output, you'll find options to open the app in a
+### 3. Structured Prompt Inspector
+- Instead of raw monospace or simple markdown, an interactive accordion decomposes the engineered directive into:
+  - **Optimizer Identity Badge**
+  - **Cognitive Persona & Assigned Stance**
+  - **Execution Objective**
+  - **Target User Task**
+  - **Reasoning Protocol Steps**
+  - **Guardrails & Negative Constraints**
+  - **Mode Toggle**: Structured view vs. raw directive with 1-tap copy.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+### 4. Full-Stack Backend (Expo Router API Routes)
+- Built directly inside Expo Router:
+  - `POST /api/auth/signup`: Password hashing via `scrypt` with random salts.
+  - `POST /api/auth/login`: Constant-time hash verification and 30-day session issuance.
+  - `POST /api/auth/logout`: Revokes active sessions in Supabase.
+  - `GET /api/auth/me`: Session validation endpoint.
+  - `POST /api/multi-agent`: Peer prompt ring execution and turn persistence.
+  - `GET / POST /api/threads`: Discussion session management.
+  - `GET /api/threads/[threadId]/messages`: Thread deliberation history.
+  - `GET / POST /api/users`: Drizzle ORM operations on the `users` table.
 
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+### 5. Zustand State Management (Slices Pattern)
+- Single store with zero prop drilling:
+  - `AuthSlice`: Session state, login, signup, logout.
+  - `ChatSlice`: Turns, thread switching, multi-stage thinking messaging, active card views.
+  - `UISlice`: History drawer slide-out.
 
-## Get a fresh project
+---
 
-When you're ready, run:
+## 🚀 Getting Started
 
+### 1. Install Dependencies
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+### 2. Configure Environment Variables
+Copy `.env.example` to `.env` and fill in your Supabase connection string and OpenRouter API key:
+```bash
+cp .env.example .env
+```
 
-### Other setup steps
+```env
+DATABASE_URL="postgresql://postgres.[REF]:[PASSWORD]@aws-0-eu-west-1.pooler.supabase.com:6543/postgres"
+OPENROUTER_API_KEY="sk-or-v1-..."
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+### 3. Push Database Schema to Supabase
+```bash
+npx drizzle-kit push
+```
 
-## Learn more
+### 4. Start the Application
+```bash
+npx expo start
+```
+- Scan the QR code with **Expo Go** on your Android or iOS device.
+- Or press `w` to run in the web browser.
 
-To learn more about developing your project with Expo, look at the following resources:
+---
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## 🛠️ Tech Stack
+- **Framework**: Expo SDK 58 (Expo Router v4)
+- **Frontend**: React Native, React Native Reanimated, React Native Gesture Handler, Lucide Icons, React Native SVG
+- **Database / ORM**: Supabase PostgreSQL, Drizzle ORM, postgres.js
+- **State Management**: Zustand (single store with slices)
+- **Validation**: Zod
+- **AI Integration**: Vercel AI SDK (`ai`, `@ai-sdk/openai`), OpenRouter API
