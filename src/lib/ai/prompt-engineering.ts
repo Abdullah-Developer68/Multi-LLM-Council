@@ -9,6 +9,8 @@
  * 5. Structural Delimiters (<objective>, <task>, <constraints>, <execution_protocol>)
  */
 
+import { getOpenRouterApiKey } from './env';
+
 export interface PromptOptimizationResult {
   originalPrompt: string;
   optimizedPrompt: string;
@@ -46,7 +48,7 @@ export async function optimizePromptWithModel(
   modelId: string,
   apiKey?: string
 ): Promise<{ optimizedPrompt: string; summary: string }> {
-  const token = apiKey || process.env.OPENROUTER_API_KEY;
+  const token = getOpenRouterApiKey(apiKey);
   if (!token) {
     return createAgentSpecificAlgorithmicOptimization(rawPrompt, modelName, modelId);
   }
@@ -187,7 +189,7 @@ export async function optimizeUserPrompt(
   rawPrompt: string,
   apiKey?: string
 ): Promise<PromptOptimizationResult> {
-  const token = apiKey || process.env.OPENROUTER_API_KEY;
+  const token = getOpenRouterApiKey(apiKey);
 
   if (token) {
     const candidateModels = [

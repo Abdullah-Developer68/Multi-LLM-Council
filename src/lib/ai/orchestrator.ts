@@ -12,6 +12,7 @@ import {
   type DiscussionRoundItem,
 } from '../../db/schema';
 import { eq } from 'drizzle-orm';
+import { getOpenRouterApiKey } from './env';
 
 export interface OrchestrationResult {
   threadId: string;
@@ -97,7 +98,7 @@ export async function runMultiAgentPipeline(
   threadId?: string,
   customApiKey?: string
 ): Promise<OrchestrationResult> {
-  const apiKey = customApiKey || process.env.OPENROUTER_API_KEY || '';
+  const apiKey = getOpenRouterApiKey(customApiKey);
 
   if (!apiKey) {
     throw new Error('OPENROUTER_API_KEY is missing from environment. Please configure it in .env');
