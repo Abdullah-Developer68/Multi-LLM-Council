@@ -6,7 +6,30 @@
  * (`verified_free_models`). `executeWithFreeModelRotation` prefers the
  * DB-persisted configuration and only uses these pools as a last-resort
  * bootstrap when the database has not been verified yet.
+ *
+ * Each pool ends with a keyless `pollinations/*` candidate. Pollinations exposes
+ * an OpenAI-compatible endpoint that needs no API key, so a seat can always
+ * answer even when every OpenRouter key has burned its 50/day free quota.
  */
+
+/** Prefix that marks a candidate as the keyless Pollinations tier. */
+export const KEYLESS_MODEL_PREFIX = 'pollinations/';
+
+/** True when a model id belongs to the keyless (no API key) fallback tier. */
+export function isKeylessModel(modelId: string | undefined | null): boolean {
+  return !!modelId && modelId.startsWith(KEYLESS_MODEL_PREFIX);
+}
+
+/**
+ * Keyless candidates tried, in order, after every OpenRouter key has failed.
+ * Pollinations' classic endpoint currently serves `openai-fast` (aliases
+ * `openai`, `gpt-oss`, `gpt-oss-20b`); unknown ids are retried against it.
+ */
+export const KEYLESS_FALLBACK_MODELS: string[] = [
+  'pollinations/openai',
+  'pollinations/openai-fast',
+  'pollinations/mistral',
+];
 
 export const SEAT_ROTATION_POOLS: Record<string, string[]> = {
   // Seat 1: NVIDIA Formal Reasoner
@@ -19,6 +42,7 @@ export const SEAT_ROTATION_POOLS: Record<string, string[]> = {
     'thinkingmachines/inkling-small:free',
     'openrouter/free',
     'liquid/lfm-2.5-2.6b:free',
+    'pollinations/openai',
   ],
   // Seat 2: Cohere Systems Architect & Code
   'north-mini-code': [
@@ -30,6 +54,7 @@ export const SEAT_ROTATION_POOLS: Record<string, string[]> = {
     'xingchen-agi/xing4.0-29b-a4b:free',
     'openrouter/free',
     'liquid/lfm-2.5-2.6b:free',
+    'pollinations/qwen-coder',
   ],
   // Seat 3: NVIDIA Ultra Strategic Synthesizer
   'nemotron-ultra': [
@@ -41,6 +66,7 @@ export const SEAT_ROTATION_POOLS: Record<string, string[]> = {
     'openrouter/free',
     'nvidia/nemotron-3.5-lightning:free',
     'liquid/lfm-2.5-2.6b:free',
+    'pollinations/mistral',
   ],
 };
 

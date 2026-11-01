@@ -3,9 +3,16 @@
  *
  * On every login we re-validate our 3 council-seat models against the live
  * OpenRouter catalog, make sure they are strictly free (prompt & completion
- * pricing === 0, or an explicit `:free` id), probe their availability/latency,
- * pick the fastest working free model as the seat's primary, and persist the
- * result into PostgreSQL (`verified_free_models`).
+ * pricing === 0, or an explicit `:free` id), check the health/quota of every
+ * configured OpenRouter key, and persist the result into PostgreSQL
+ * (`verified_free_models`).
+ *
+ * Login verification is deliberately **zero-cost**: it only uses
+ *   - `GET /api/v1/models`      (free, no chat quota)
+ *   - `GET /api/v1/auth/key`    (free, no chat quota)
+ * and never `POST /api/v1/chat/completions`, so signing in cannot burn the
+ * 50/day free chat allowance. Availability/latency probes remain available via
+ * `verifyAndPersistFreeModels({ deep: true })` for explicit diagnostics only.
  *
  * The orchestrator then reads those persisted records back through
  * `getConfiguredModelsFromDb()` so real chat turns only ever spend their
@@ -19,18 +26,20 @@ import {
   type VerifiedFreeModelRow,
 } from '../../db/schema';
 import { COUNCIL_AGENTS } from './agents';
-import { getSeatPool } from './seat-pools';
+import { getSeatPool, isKeylessModel } from './seat-pools';
 import {
+  clearApiKeyQuotaExhaustion,
   clearModelCooldown,
+  describeApiKey,
+  isApiKeyQuotaExhausted,
   isDailyFreeQuotaError,
   isExhaustionOrRateLimitError,
-  isFreeQuotaExhausted,
   isModelInCooldown,
-  markFreeQuotaExhausted,
+  markApiKeyQuotaExhausted,
   markModelCooldown,
   parseRateLimitResetMs,
 } from './model-cooldown';
-import { getOpenRouterApiKey } from './env';
+import { getOpenRouterApiKey, getOpenRouterApiKeys } from './env';
 
 export interface VerifiedModelConfig {
   seatId: string;
@@ -54,6 +63,21 @@ export interface VerifyOptions {
   apiKey?: string;
 }
 
+/** Result of the zero-cost `GET /api/v1/auth/key` check for one API key. */
+export interface OpenRouterKeyStatus {
+  /** Log-safe key label, e.g. `sk-or-v1-70a…88f0`. */
+  label: string;
+  /** False when the key is rejected (401/403) or the check failed. */
+  ok: boolean;
+  isFreeTier: boolean;
+  used: number | null;
+  limit: number | null;
+  remaining: number | null;
+  /** True when `remaining === 0` (free-model daily allowance used up). */
+  exhausted: boolean;
+  error?: string;
+}
+
 interface OpenRouterCatalogModel {
   id: string;
   name?: string;
@@ -62,18 +86,15 @@ interface OpenRouterCatalogModel {
 
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_KEY_URL = 'https://openrouter.ai/api/v1/auth/key';
 
 const CATALOG_TTL_MS = 5 * 60 * 1000;
 const CONFIG_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEEP_VERIFY_MIN_INTERVAL_MS = 60 * 1000;
 /** Rapid consecutive logins reuse a just-completed verification. */
 const FAST_VERIFY_MIN_INTERVAL_MS = 10 * 1000;
-/**
- * Latency probes cost 3-6 free requests, and OpenRouter only allows 50 free
- * requests/day on accounts with < 10 credits. Probe on the first login and then
- * at most every 6 hours; catalog verification still runs on every login.
- */
-const LOGIN_DEEP_PROBE_MIN_INTERVAL_MS = 6 * 60 * 60 * 1000;
+/** How long a key-quota check is reused before hitting /auth/key again. */
+const KEY_STATUS_TTL_MS = 60 * 1000;
 
 /** Never burn more than this many probe requests per seat (free-tier friendly). */
 const MAX_PROBE_ATTEMPTS_PER_SEAT = 2;
@@ -83,6 +104,7 @@ interface RegistryState {
   tableEnsured: boolean;
   catalogCache: { fetchedAt: number; models: Map<string, OpenRouterCatalogModel> } | null;
   configCache: { fetchedAt: number; configs: VerifiedModelConfig[] } | null;
+  keyStatusCache: { fetchedAt: number; statuses: OpenRouterKeyStatus[] } | null;
   inflightFastVerify: Promise<VerifiedModelConfig[]> | null;
   inflightDeepVerify: Promise<VerifiedModelConfig[]> | null;
   lastDeepVerifyAt: number;
@@ -95,6 +117,7 @@ const state: RegistryState = (globalRegistry.__traModelRegistry ??= {
   tableEnsured: false,
   catalogCache: null,
   configCache: null,
+  keyStatusCache: null,
   inflightFastVerify: null,
   inflightDeepVerify: null,
   lastDeepVerifyAt: 0,
@@ -183,6 +206,136 @@ export async function fetchOpenRouterCatalog(options: {
   }
 }
 
+/** Epoch ms of the next UTC midnight — when OpenRouter resets free-model quotas. */
+function nextUtcMidnightMs(): number {
+  const now = new Date();
+  return Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate() + 1,
+    0,
+    0,
+    0,
+    0
+  );
+}
+
+/**
+ * Zero-cost health/quota check for every configured OpenRouter key.
+ *
+ * `GET /api/v1/auth/key` does not consume any chat request, so this is safe to
+ * run on every login. Keys with `free_model_daily_requests.remaining === 0` are
+ * marked exhausted so chat requests automatically rotate to a key that still has
+ * quota (and to the keyless tier if none do).
+ */
+export async function verifyOpenRouterKeys(options: {
+  timeoutMs?: number;
+  force?: boolean;
+} = {}): Promise<OpenRouterKeyStatus[]> {
+  const { timeoutMs = 5000, force = false } = options;
+
+  if (
+    !force &&
+    state.keyStatusCache &&
+    Date.now() - state.keyStatusCache.fetchedAt < KEY_STATUS_TTL_MS
+  ) {
+    return state.keyStatusCache.statuses;
+  }
+
+  const keys = getOpenRouterApiKeys();
+  if (keys.length === 0) {
+    state.keyStatusCache = { fetchedAt: Date.now(), statuses: [] };
+    return [];
+  }
+
+  const statuses = await Promise.all(
+    keys.map(async (key): Promise<OpenRouterKeyStatus> => {
+      const label = describeApiKey(key);
+      try {
+        const res = await fetch(OPENROUTER_KEY_URL, {
+          headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+
+        if (!res.ok) {
+          const body = await res.text().catch(() => '');
+          const rejected = res.status === 401 || res.status === 403;
+          console.warn(
+            `[ModelRegistry] Key ${label} check failed (HTTP ${res.status}): ${body.slice(0, 120)}`
+          );
+          if (rejected) {
+            // A rejected key can never serve chat; park it for the day.
+            markApiKeyQuotaExhausted(key, nextUtcMidnightMs());
+          }
+          return {
+            label,
+            ok: false,
+            isFreeTier: false,
+            used: null,
+            limit: null,
+            remaining: null,
+            exhausted: rejected,
+            error: `HTTP ${res.status}`,
+          };
+        }
+
+        const payload: any = await res.json().catch(() => null);
+        const data = payload?.data ?? {};
+        const daily = data.free_model_daily_requests ?? {};
+
+        const used = typeof daily.used === 'number' ? daily.used : null;
+        const limit = typeof daily.limit === 'number' ? daily.limit : null;
+        const remaining =
+          typeof daily.remaining === 'number'
+            ? daily.remaining
+            : used !== null && limit !== null
+              ? Math.max(0, limit - used)
+              : null;
+
+        const exhausted = remaining === 0;
+        if (exhausted) {
+          markApiKeyQuotaExhausted(key, nextUtcMidnightMs());
+        } else {
+          clearApiKeyQuotaExhaustion(key);
+        }
+
+        console.log(
+          `[ModelRegistry] Key ${label}: free-tier=${data.is_free_tier !== false} ` +
+            `used=${used ?? '?'}/${limit ?? '?'} remaining=${remaining ?? '?'}` +
+            `${exhausted ? ' (EXHAUSTED — rotating to next key)' : ''}`
+        );
+
+        return {
+          label,
+          ok: true,
+          isFreeTier: data.is_free_tier !== false,
+          used,
+          limit,
+          remaining,
+          exhausted,
+        };
+      } catch (err: any) {
+        console.warn(
+          `[ModelRegistry] Key ${label} check failed: ${String(err?.message || err).slice(0, 120)}`
+        );
+        return {
+          label,
+          ok: false,
+          isFreeTier: false,
+          used: null,
+          limit: null,
+          remaining: null,
+          exhausted: isApiKeyQuotaExhausted(key),
+          error: String(err?.message || err).slice(0, 120),
+        };
+      }
+    })
+  );
+
+  state.keyStatusCache = { fetchedAt: Date.now(), statuses };
+  return statuses;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Availability / latency probing                                              */
 /* -------------------------------------------------------------------------- */
@@ -198,14 +351,14 @@ interface ProbeResult {
 async function probeModel(modelId: string, apiKey: string, timeoutMs: number): Promise<ProbeResult> {
   const started = Date.now();
 
-  // Never burn a request when the account-wide daily free quota is exhausted.
-  if (isFreeQuotaExhausted()) {
+  // Never burn a request on a key whose free daily quota is already exhausted.
+  if (isApiKeyQuotaExhausted(apiKey)) {
     return {
       model: modelId,
       ok: false,
       latencyMs: null,
       rateLimited: true,
-      reason: 'free daily quota exhausted',
+      reason: 'free daily quota exhausted for this key',
     };
   }
 
@@ -230,7 +383,7 @@ async function probeModel(modelId: string, apiKey: string, timeoutMs: number): P
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
       if (isDailyFreeQuotaError(errText)) {
-        markFreeQuotaExhausted(parseRateLimitResetMs(res.headers.get('x-ratelimit-reset')));
+        markApiKeyQuotaExhausted(apiKey, parseRateLimitResetMs(res.headers.get('x-ratelimit-reset')));
         return {
           model: modelId,
           ok: false,
@@ -259,8 +412,12 @@ async function probeModel(modelId: string, apiKey: string, timeoutMs: number): P
     if (data?.error) {
       const errMsg = data.error.message || JSON.stringify(data.error);
       if (isDailyFreeQuotaError(errMsg)) {
-        markFreeQuotaExhausted(
-          parseRateLimitResetMs(data.error?.metadata?.headers?.['X-RateLimit-Reset'])
+        markApiKeyQuotaExhausted(
+          apiKey,
+          parseRateLimitResetMs(
+            data.error?.metadata?.headers?.['X-RateLimit-Reset'] ??
+              data.error?.metadata?.headers?.['x-ratelimit-reset']
+          )
         );
         return {
           model: modelId,
@@ -308,6 +465,9 @@ async function probeModel(modelId: string, apiKey: string, timeoutMs: number): P
  * Probes candidates for one seat sequentially until one answers, so a single
  * verification run stays well inside OpenRouter's free-tier request limit
  * (max 2 attempts per seat, 3 seats probed concurrently => <= 6 requests).
+ *
+ * Keyless `pollinations/*` candidates are never probed — they are not served by
+ * OpenRouter, so probing them would only waste a request.
  */
 async function probeSeatCandidates(
   candidates: string[],
@@ -315,7 +475,7 @@ async function probeSeatCandidates(
   timeoutMs: number
 ): Promise<{ winner: ProbeResult | null; attempted: ProbeResult[] }> {
   const attempted: ProbeResult[] = [];
-  const toTry = candidates.slice(0, MAX_PROBE_ATTEMPTS_PER_SEAT);
+  const toTry = candidates.filter((m) => !isKeylessModel(m)).slice(0, MAX_PROBE_ATTEMPTS_PER_SEAT);
 
   for (const model of toTry) {
     const result = await probeModel(model, apiKey, timeoutMs);
@@ -392,17 +552,23 @@ async function resolveSeatConfigs(
   const seatConfigs = await Promise.all(
     COUNCIL_AGENTS.map(async (agent): Promise<VerifiedModelConfig> => {
       const curated = unique(getSeatPool(agent.id));
+      // Keyless candidates are not part of the OpenRouter catalog, so they are
+      // validated separately and always kept as the last-resort tier.
+      const keylessCandidates = curated.filter(isKeylessModel);
+      const openRouterCurated = curated.filter((id) => !isKeylessModel(id));
 
       // Keep only models that exist in the live catalog *and* are strictly free.
-      let candidates = catalog
-        ? curated.filter((id) => {
+      let verifiedOpenRouter = catalog
+        ? openRouterCurated.filter((id) => {
             const m = catalog.get(id);
             return !!m && isStrictlyFreeModel(m);
           })
-        : [...curated];
+        : [...openRouterCurated];
 
-      // Safety net: never leave a seat without candidates.
-      if (candidates.length === 0) candidates = [...curated];
+      // Safety net: never leave a seat without OpenRouter candidates.
+      if (verifiedOpenRouter.length === 0) verifiedOpenRouter = [...openRouterCurated];
+
+      const candidates = unique([...verifiedOpenRouter, ...keylessCandidates]);
 
       const previous = existingBySeat.get(agent.id);
       let primaryModel = candidates[0];
@@ -589,15 +755,30 @@ export async function verifyAndPersistFreeModels(options: VerifyOptions = {}): P
 }
 
 /**
- * Login helper: guarantees fresh catalog verification + DB upsert within a hard
- * latency budget, then refreshes latency probes in the background.
+ * Login helper: verifies every council seat against the live OpenRouter catalog
+ * and checks each configured key's free-model quota, then upserts the result in
+ * PostgreSQL — all within a hard latency budget.
+ *
+ * This path is **zero chat-quota cost**: it only calls `GET /api/v1/models` and
+ * `GET /api/v1/auth/key`. It never POSTs to `/chat/completions` and never kicks
+ * off background probes, because those would burn the 50/day free allowance
+ * that real chat turns need.
  */
 export async function verifyFreeModelsOnLogin(budgetMs = 4500): Promise<VerifiedModelConfig[]> {
   let configs: VerifiedModelConfig[] = [];
 
+  const verification = (async () => {
+    // Key health/quota first, so seat verification and chat rotation both see
+    // accurate per-key exhaustion state. Failures are non-fatal.
+    await verifyOpenRouterKeys({ force: true }).catch((err) => {
+      console.warn('[ModelRegistry] Key verification failed:', err?.message || err);
+    });
+    return verifyAndPersistFreeModels({ deep: false, force: true });
+  })();
+
   try {
     configs = await Promise.race([
-      verifyAndPersistFreeModels({ deep: false, force: true }),
+      verification,
       new Promise<never>((_, reject) => {
         const timer = setTimeout(
           () => reject(new Error(`login model verification exceeded ${budgetMs}ms budget`)),
@@ -610,18 +791,6 @@ export async function verifyFreeModelsOnLogin(budgetMs = 4500): Promise<Verified
   } catch (err: any) {
     console.warn('[ModelRegistry] Fast login verification fell back to cache/DB:', err?.message || err);
     configs = await getConfiguredModelsFromDb(true).catch(() => []);
-  }
-
-  // Kick off latency probes without blocking the login response.
-  // Skipped while the account-wide free daily quota is exhausted, and limited to
-  // once every 6 hours so login verification doesn't starve chat of free requests.
-  if (
-    !isFreeQuotaExhausted() &&
-    Date.now() - state.lastDeepVerifyAt >= LOGIN_DEEP_PROBE_MIN_INTERVAL_MS
-  ) {
-    void verifyAndPersistFreeModels({ deep: true, probeTimeoutMs: 5000 }).catch((err) => {
-      console.warn('[ModelRegistry] Background deep verification failed:', err?.message || err);
-    });
   }
 
   return configs;
@@ -659,6 +828,7 @@ export async function getConfiguredModelForSeat(seatId: string): Promise<Verifie
 export function resetModelRegistryCache(): void {
   state.catalogCache = null;
   state.configCache = null;
+  state.keyStatusCache = null;
   state.lastDeepVerifyAt = 0;
   state.lastFastVerifyAt = 0;
   state.inflightFastVerify = null;

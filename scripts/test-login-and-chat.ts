@@ -78,7 +78,12 @@ function isQuotaMessage(text: string): boolean {
 }
 
 function isFreeModelId(modelId: string): boolean {
-  return modelId.endsWith(':free') || modelId === 'openrouter/free';
+  return (
+    modelId.endsWith(':free') ||
+    modelId === 'openrouter/free' ||
+    // Keyless Pollinations tier: no API key, no per-key daily cap, 100% free.
+    modelId.startsWith('pollinations/')
+  );
 }
 
 async function serverIsUp(): Promise<boolean> {

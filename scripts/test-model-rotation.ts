@@ -9,8 +9,13 @@ import {
   describeFreeQuotaExhaustion,
   getModelRotationStatus,
   executeWithFreeModelRotation,
+  isKeylessModel,
+  isApiKeyQuotaExhausted,
+  markApiKeyQuotaExhausted,
+  clearApiKeyQuotaExhaustion,
+  areAllApiKeysQuotaExhausted,
 } from '../src/lib/ai/model-rotation';
-import { getOpenRouterApiKey } from '../src/lib/ai/env';
+import { getOpenRouterApiKey, getOpenRouterApiKeys } from '../src/lib/ai/env';
 
 // Mirror provider determination from model-logo.tsx to test logo invariance without importing react-native JSX in node
 function getModelProvider(modelId?: string, provider?: string): 'nvidia' | 'cohere' {
@@ -28,6 +33,44 @@ async function runTests() {
   assert(SEAT_ROTATION_POOLS['north-mini-code'].length >= 4, 'north-mini-code pool has >= 4 models');
   assert(SEAT_ROTATION_POOLS['nemotron-ultra'].length >= 4, 'nemotron-ultra pool has >= 4 models');
   console.log('  ✅ [PASS] All 3 council seats have multi-model free rotation pools.');
+
+  // Test 1b: Every seat ends with a keyless (no API key) fallback tier
+  console.log('1b. Checking keyless fallback tier on every seat...');
+  for (const [seatId, pool] of Object.entries(SEAT_ROTATION_POOLS)) {
+    const keyless = pool.filter((m) => isKeylessModel(m));
+    assert(keyless.length > 0, `${seatId} pool has no keyless pollinations fallback`);
+    assert(
+      isKeylessModel(pool[pool.length - 1]),
+      `${seatId} pool must end with a keyless fallback (found ${pool[pool.length - 1]})`
+    );
+  }
+  console.log('  ✅ [PASS] Every seat has a keyless Pollinations fallback as last resort.');
+
+  // Test 1c: Multi-key configuration
+  console.log('1c. Checking multi-key OpenRouter configuration...');
+  const configuredKeys = getOpenRouterApiKeys();
+  console.log(`  Configured OpenRouter keys: ${configuredKeys.length}`);
+  assert(configuredKeys.length >= 1, 'at least one OpenRouter key must be configured');
+  assert.strictEqual(new Set(configuredKeys).size, configuredKeys.length, 'keys must be de-duplicated');
+  assert(configuredKeys.includes(getOpenRouterApiKey()), 'active key must come from the configured list');
+  console.log('  ✅ [PASS] Multiple OpenRouter keys are configured and de-duplicated.');
+
+  // Test 1d: Per-key quota isolation
+  console.log('1d. Checking per-key daily quota isolation...');
+  const keyA = 'sk-or-v1-test-key-alpha-000000000000';
+  const keyB = 'sk-or-v1-test-key-beta-111111111111';
+  clearApiKeyQuotaExhaustion(keyA);
+  clearApiKeyQuotaExhaustion(keyB);
+  markApiKeyQuotaExhausted(keyA, Date.now() + 60_000);
+  assert(isApiKeyQuotaExhausted(keyA), 'key A should be exhausted');
+  assert(!isApiKeyQuotaExhausted(keyB), 'key B must stay usable when key A is exhausted');
+  assert(!areAllApiKeysQuotaExhausted([keyA, keyB]), 'not all keys are exhausted');
+  markApiKeyQuotaExhausted(keyB, Date.now() + 60_000);
+  assert(areAllApiKeysQuotaExhausted([keyA, keyB]), 'all keys should now be exhausted');
+  clearApiKeyQuotaExhaustion(keyA);
+  clearApiKeyQuotaExhaustion(keyB);
+  assert(!isApiKeyQuotaExhausted(keyA) && !isApiKeyQuotaExhausted(keyB), 'clearing must reset both keys');
+  console.log('  ✅ [PASS] Exhausting one key never blocks the next key.');
 
   // Test 2: Provider mapping & Icon invariance
   console.log('2. Verifying Icon & Provider Invariance across Rotations...');

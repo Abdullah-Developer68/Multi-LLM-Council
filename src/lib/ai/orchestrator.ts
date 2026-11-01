@@ -49,10 +49,13 @@ export async function runMultiAgentPipeline(
   options: OrchestrationOptions = {}
 ): Promise<OrchestrationResult> {
   const startedAt = Date.now();
+  // May be empty when no OpenRouter key is configured at all — the rotation
+  // engine then answers through the keyless Pollinations tier instead.
   const apiKey = getOpenRouterApiKey(customApiKey);
-
   if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY is missing from environment. Please configure it in .env');
+    console.warn(
+      '[Orchestrator] No OPENROUTER_API_KEY configured — all council seats will use the keyless free tier.'
+    );
   }
 
   const {
@@ -189,6 +192,16 @@ Be information-dense: no filler, no repetition, no meta-commentary. Keep it unde
 
   // 4. Consensus Synthesis
   const successfulAgents = rawAgentResponses.filter((a) => !a.answer.startsWith('### Live Model Error'));
+
+  // Never persist an error-only turn: a history full of "### Live Model Error"
+  // cards is worse than an honest failure the caller can retry.
+  if (successfulAgents.length === 0) {
+    const reasons = rawAgentResponses
+      .map((a) => `${a.agentName}: ${a.answer.split('\n').slice(2).join(' ').slice(0, 160)}`)
+      .join(' | ');
+    throw new Error(`All council seats failed to generate a response. ${reasons}`);
+  }
+
   const topAgent = successfulAgents[0] || rawAgentResponses[0];
   const consensusSolution = topAgent?.answer || 'No response produced.';
   const consensusRationale = `Synthesized after circular cross-model prompt optimization across ${agentCount} AI models (${COUNCIL_AGENTS.map((a) => a.name).join(', ')}).`;
