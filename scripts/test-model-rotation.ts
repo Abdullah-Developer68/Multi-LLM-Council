@@ -5,6 +5,8 @@ import {
   markModelCooldown,
   clearModelCooldown,
   isExhaustionOrRateLimitError,
+  isFreeQuotaExhausted,
+  describeFreeQuotaExhaustion,
   getModelRotationStatus,
   executeWithFreeModelRotation,
 } from '../src/lib/ai/model-rotation';
@@ -69,44 +71,64 @@ async function runTests() {
   // Test 5: Live API Rotation Execution
   console.log('5. Testing Live Execution via Model Rotation Engine...');
   const apiKey = getOpenRouterApiKey();
-  if (apiKey) {
-    const res = await executeWithFreeModelRotation(
-      'north-mini-code',
-      'Cohere Systems Architect',
-      'You are a concise expert. Output 1 word.',
-      'Respond with OK.',
-      apiKey,
-      { maxTokens: 20, timeoutMs: 25000 }
-    );
-    console.log(`  Model used: ${res.modelUsed}, wasRotated: ${res.wasRotated}, output: "${res.text.slice(0, 30)}"`);
-    assert(res.text.length > 0, 'Returned non-empty response');
-    console.log('  ✅ [PASS] Live OpenRouter generation succeeded via rotation pool.');
+  let liveTestsSkipped = false;
+  if (apiKey && !isFreeQuotaExhausted()) {
+    try {
+      const res = await executeWithFreeModelRotation(
+        'north-mini-code',
+        'Cohere Systems Architect',
+        'You are a concise expert. Output 1 word.',
+        'Respond with OK.',
+        apiKey,
+        { maxTokens: 20, timeoutMs: 25000 }
+      );
+      console.log(`  Model used: ${res.modelUsed}, wasRotated: ${res.wasRotated}, output: "${res.text.slice(0, 30)}"`);
+      assert(res.text.length > 0, 'Returned non-empty response');
+      console.log('  ✅ [PASS] Live OpenRouter generation succeeded via rotation pool.');
 
-    // Test 6: Automatic Failover when Primary is in Cooldown
-    console.log('6. Testing Automatic Rotation when Primary is in Cooldown...');
-    markModelCooldown('cohere/north-mini-code:free', 'Simulated 429 quota exhaustion');
-    const rotatedRes = await executeWithFreeModelRotation(
-      'north-mini-code',
-      'Cohere Systems Architect',
-      'You are a concise expert. Output 1 word.',
-      'Respond with OK.',
-      apiKey,
-      { maxTokens: 20, timeoutMs: 35000 }
-    );
-    console.log(`  Model used on rotation: ${rotatedRes.modelUsed}, wasRotated: ${rotatedRes.wasRotated}`);
-    assert.strictEqual(rotatedRes.wasRotated, true, 'Should mark wasRotated as true');
-    assert.notStrictEqual(rotatedRes.modelUsed, 'cohere/north-mini-code:free', 'Should not use cooled-down model');
-    assert(rotatedRes.text.length > 0, 'Should return non-empty response from fallback model');
-    clearModelCooldown('cohere/north-mini-code:free');
-    console.log('  ✅ [PASS] Automatic failover successfully selected next active free model.');
+      // Test 6: Automatic Failover when Primary is in Cooldown
+      console.log('6. Testing Automatic Rotation when Primary is in Cooldown...');
+      markModelCooldown('cohere/north-mini-code:free', 'Simulated 429 quota exhaustion');
+      const rotatedRes = await executeWithFreeModelRotation(
+        'north-mini-code',
+        'Cohere Systems Architect',
+        'You are a concise expert. Output 1 word.',
+        'Respond with OK.',
+        apiKey,
+        { maxTokens: 20, timeoutMs: 35000 }
+      );
+      console.log(`  Model used on rotation: ${rotatedRes.modelUsed}, wasRotated: ${rotatedRes.wasRotated}`);
+      assert.strictEqual(rotatedRes.wasRotated, true, 'Should mark wasRotated as true');
+      assert.notStrictEqual(rotatedRes.modelUsed, 'cohere/north-mini-code:free', 'Should not use cooled-down model');
+      assert(rotatedRes.text.length > 0, 'Should return non-empty response from fallback model');
+      clearModelCooldown('cohere/north-mini-code:free');
+      console.log('  ✅ [PASS] Automatic failover successfully selected next active free model.');
+    } catch (err: any) {
+      if (isFreeQuotaExhausted()) {
+        liveTestsSkipped = true;
+        console.log(`  ⏭️ [SKIP] Live generation unavailable: ${describeFreeQuotaExhaustion()}`);
+      } else {
+        throw err;
+      }
+    }
+  } else if (apiKey) {
+    liveTestsSkipped = true;
+    console.log(`  ⏭️ [SKIP] Live generation unavailable: ${describeFreeQuotaExhaustion()}`);
   } else {
+    liveTestsSkipped = true;
     console.log('  ⚠️ Skipping live test (no API key present).');
   }
 
-  console.log('\n🎉 ALL MODEL ROTATION TESTS PASSED!');
+  console.log(
+    liveTestsSkipped
+      ? '\n🎉 MODEL ROTATION UNIT TESTS PASSED (live generation skipped)\n'
+      : '\n🎉 ALL MODEL ROTATION TESTS PASSED!\n'
+  );
 }
 
-runTests().catch((err) => {
-  console.error('❌ Model rotation test failed:', err);
-  process.exit(1);
-});
+runTests()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error('❌ Model rotation test failed:', err);
+    process.exit(1);
+  });

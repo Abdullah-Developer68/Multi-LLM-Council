@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
-import type { MultiAgentTurn, ThreadSummary, UserAccount } from '../types';
+import type { MultiAgentTurn, ThreadSummary, UserAccount, VerifiedModelConfig } from '../types';
 
 function getApiBaseUrl(): string {
   if (Platform.OS === 'web') {
@@ -45,7 +45,7 @@ class ApiClient {
     email: string,
     password: string,
     fullName: string
-  ): Promise<{ token: string; user: UserAccount }> {
+  ): Promise<{ token: string; user: UserAccount; verifiedModels: VerifiedModelConfig[] }> {
     const res = await fetch(`${getApiBaseUrl()}/api/auth/signup`, {
       method: 'POST',
       headers: this.getHeaders(),
@@ -56,13 +56,17 @@ class ApiClient {
       throw new Error(data.error || 'Failed to sign up.');
     }
     this.token = data.token;
-    return { token: data.token, user: data.user };
+    return {
+      token: data.token,
+      user: data.user,
+      verifiedModels: data.verifiedModels || [],
+    };
   }
 
   public async login(
     email: string,
     password: string
-  ): Promise<{ token: string; user: UserAccount }> {
+  ): Promise<{ token: string; user: UserAccount; verifiedModels: VerifiedModelConfig[] }> {
     const res = await fetch(`${getApiBaseUrl()}/api/auth/login`, {
       method: 'POST',
       headers: this.getHeaders(),
@@ -73,7 +77,11 @@ class ApiClient {
       throw new Error(data.error || 'Failed to sign in.');
     }
     this.token = data.token;
-    return { token: data.token, user: data.user };
+    return {
+      token: data.token,
+      user: data.user,
+      verifiedModels: data.verifiedModels || [],
+    };
   }
 
   public async logout(): Promise<void> {
@@ -101,6 +109,18 @@ class ApiClient {
       throw new Error(data.error || 'Failed to verify session.');
     }
     return data.user;
+  }
+
+  /** Returns the council seats' verified free model configuration (server-verified + DB-persisted). */
+  public async fetchVerifiedModels(): Promise<VerifiedModelConfig[]> {
+    const res = await fetch(`${getApiBaseUrl()}/api/models/verify`, {
+      headers: this.getHeaders(),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Failed to load verified free models.');
+    }
+    return data.models || [];
   }
 
   public async fetchThreads(): Promise<ThreadSummary[]> {

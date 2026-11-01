@@ -53,7 +53,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test": "npx tsx scripts/test-ui-units.ts && npx tsx --env-file=.env scripts/test-all-features.ts"
+    "test": "npx tsx scripts/test-ui-units.ts && npx tsx --env-file=.env scripts/test-all-features.ts",
+    "test:login-chat": "npx tsx --env-file=.env scripts/test-login-and-chat.ts"
   },
   "private": true
 }

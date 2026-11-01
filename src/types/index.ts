@@ -12,6 +12,19 @@ export interface ThreadSummary {
   updatedAt: string | Date;
 }
 
+/** A council seat's OpenRouter model configuration verified against the live catalog. */
+export interface VerifiedModelConfig {
+  seatId: string;
+  agentName: string;
+  primaryModel: string;
+  fallbackModels: string[];
+  provider: string;
+  isFree: boolean;
+  isAvailable: boolean;
+  latencyMs: number | null;
+  verifiedAt: string;
+}
+
 export interface AgentResponseItem {
   agentId: string;
   agentName: string;
@@ -27,6 +40,8 @@ export interface AgentResponseItem {
   optimizedByAgentId?: string;
   optimizedByAgentName?: string;
   receivedPrompt?: string;
+  /** Wall-clock time spent generating this seat's answer (ms). */
+  latencyMs?: number;
 }
 
 export interface PromptOptimizationDetails {

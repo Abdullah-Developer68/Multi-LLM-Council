@@ -3,6 +3,7 @@ import { db } from '../../../db';
 import { appAccounts } from '../../../db/schema';
 import { hashPassword } from '../../../lib/auth/password';
 import { createSession } from '../../../lib/auth/session';
+import { verifyFreeModelsOnLogin } from '../../../lib/ai/model-registry';
 import { eq } from 'drizzle-orm';
 
 export async function POST(request: Request) {
@@ -51,11 +52,22 @@ export async function POST(request: Request) {
 
     const token = await createSession(inserted.id);
 
+    // Fresh account creation is also a login: verify free models and persist them.
+    const verificationStartedAt = Date.now();
+    const verifiedModels = await verifyFreeModelsOnLogin(4500).catch((err) => {
+      console.warn('Signup model verification failed:', err?.message || err);
+      return [];
+    });
+    const modelVerificationMs = Date.now() - verificationStartedAt;
+
     return Response.json(
       {
         success: true,
         token,
         user: inserted,
+        verifiedModels,
+        modelsVerified: verifiedModels.length === 3,
+        modelVerificationMs,
         message: 'Account created successfully.',
       },
       { status: 201 }

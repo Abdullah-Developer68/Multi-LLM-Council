@@ -1,4 +1,4 @@
-import { pgTable, serial, text, varchar, timestamp, jsonb, integer } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, varchar, timestamp, jsonb, integer, boolean } from 'drizzle-orm/pg-core';
 
 // 1. Required users table as requested by the user
 export const users = pgTable('users', {
@@ -57,6 +57,8 @@ export interface AgentResponseItem {
   optimizedByAgentId?: string;
   optimizedByAgentName?: string;
   receivedPrompt?: string;
+  /** Wall-clock time spent generating this seat's answer (ms). */
+  latencyMs?: number;
 }
 
 export interface PromptOptimizationDetails {
@@ -89,3 +91,21 @@ export const multiAgentTurns = pgTable('multi_agent_turns', {
   rankedAgentIds: jsonb('ranked_agent_ids').$type<string[]>(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+// 6. Verified free OpenRouter models per council seat.
+// Re-verified against the live OpenRouter catalog on every login so the
+// orchestrator always rotates over models that are genuinely free & available.
+export const verifiedFreeModels = pgTable('verified_free_models', {
+  seatId: text('seat_id').primaryKey(),
+  agentName: text('agent_name').notNull(),
+  primaryModel: text('primary_model').notNull(),
+  fallbackModels: jsonb('fallback_models').$type<string[]>().notNull(),
+  provider: text('provider').notNull(),
+  isFree: boolean('is_free').notNull().default(true),
+  isAvailable: boolean('is_available').notNull().default(true),
+  latencyMs: integer('latency_ms'),
+  verifiedAt: timestamp('verified_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type VerifiedFreeModelRow = typeof verifiedFreeModels.$inferSelect;
+export type VerifiedFreeModelInsert = typeof verifiedFreeModels.$inferInsert;

@@ -12,13 +12,15 @@ The system connects three specialized, active free AI models into a collaborativ
 ## 🏛️ Core Architecture & Features
 
 ### 1. Peer-to-Peer Ring Prompt Optimization
-- **Ring Transformation**: Each AI model optimizes the raw user prompt from its unique stance.
-  - Model 0 optimizes the prompt for Model 1.
-  - Model 1 optimizes the prompt for Model 2.
-  - Model 2 optimizes the prompt for Model 0.
+- **Instant Ring Transformation**: Each council seat deterministically engineers a specialized directive for its peer (role framing, task decomposition, CoT protocol, guardrails) in microseconds — no LLM round-trips are spent before the council answers.
+  - Model 0 prepares the directive for Model 1.
+  - Model 1 prepares the directive for Model 2.
+  - Model 2 prepares the directive for Model 0.
 - **Cross-Model Execution**: Each model answers using the prompt engineered specifically for it by its peer.
 - **Consensus Synthesis**: Synthesizes the council's collective solution with rationales and reasoning steps.
-- **Resilient Fallback**: Auto-mitigates rate limits (HTTP 429) to ensure zero downtime.
+- **Resilient Fallback**: Auto-mitigates rate limits (HTTP 429), timeouts (20s per candidate) and upstream outages by rotating through verified free models, preserving the seat's `agentId` (and therefore its NVIDIA/Cohere logo).
+- **Verified Free Models**: On every login the 3 seat models are re-checked against the live OpenRouter catalog (`GET /api/v1/models`), confirmed to be strictly free, probed for availability/latency (rate-limited to protect the daily free quota), and persisted in the `verified_free_models` PostgreSQL table.
+- **Optional Deep Optimization**: `runMultiAgentPipeline(prompt, threadId, apiKey, { livePromptOptimization: true })` restores the slower LLM-based prompt rewriting stage.
 
 ### 2. Physical Stacked Cards Deck (Gesture Swipe)
 - **Deck of Cards**: AI replies are displayed in a stacked card deck where cards 2 and 3 visibly peek from underneath (offset by 10px/20px and scaled down), clearly signaling cards are stacked behind.
@@ -43,6 +45,7 @@ The system connects three specialized, active free AI models into a collaborativ
   - `POST /api/auth/logout`: Revokes active sessions in Supabase.
   - `GET /api/auth/me`: Session validation endpoint.
   - `POST /api/multi-agent`: Peer prompt ring execution and turn persistence.
+  - `GET / POST /api/models/verify`: Verifies the council's free OpenRouter models against the live catalog, probes availability/latency (`?deep=1` / `{ "deep": true }`), and returns the rows persisted in `verified_free_models`.
   - `GET / POST /api/threads`: Discussion session management.
   - `GET /api/threads/[threadId]/messages`: Thread deliberation history.
   - `GET / POST /api/users`: Drizzle ORM operations on the `users` table.
@@ -77,6 +80,7 @@ OPENROUTER_API_KEY="sk-or-v1-..."
 ```bash
 npx drizzle-kit push
 ```
+> `verified_free_models` is also created automatically (`CREATE TABLE IF NOT EXISTS`) the first time the app verifies models, so it works without a manual migration.
 
 ### 4. Start the Application
 ```bash
@@ -84,6 +88,14 @@ npx expo start
 ```
 - Scan the QR code with **Expo Go** on your Android or iOS device.
 - Or press `w` to run in the web browser.
+
+### Verification scripts
+```bash
+npx tsx --env-file=.env scripts/test-login-and-chat.ts   # login -> model verification -> live chat -> DB checks
+npx tsx --env-file=.env scripts/test-model-rotation.ts   # rotation/failover unit + live tests
+```
+
+> **OpenRouter free tier**: accounts with fewer than 10 credits get **50 free-model requests per day** (plus 20/min). The app fast-fails with a clear message when that account-wide quota is exhausted instead of hanging, and limits model probes so they don't starve chat of requests.
 
 ---
 

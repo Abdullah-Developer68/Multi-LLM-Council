@@ -7,17 +7,19 @@ export const createAuthSlice: AppSliceCreator<AuthSlice> = (set, get) => ({
   isAuthenticated: false,
   isAuthLoading: false,
   authError: null,
+  verifiedModels: [],
 
   login: async (email: string, password: string): Promise<boolean> => {
     set({ isAuthLoading: true, authError: null });
     try {
-      const { token, user } = await apiClient.login(email, password);
+      const { token, user, verifiedModels } = await apiClient.login(email, password);
       set({
         user,
         token,
         isAuthenticated: true,
         isAuthLoading: false,
         authError: null,
+        verifiedModels,
       });
       // Load user threads upon login
       get().fetchThreads();
@@ -35,13 +37,14 @@ export const createAuthSlice: AppSliceCreator<AuthSlice> = (set, get) => ({
   signup: async (email: string, password: string, fullName: string): Promise<boolean> => {
     set({ isAuthLoading: true, authError: null });
     try {
-      const { token, user } = await apiClient.signup(email, password, fullName);
+      const { token, user, verifiedModels } = await apiClient.signup(email, password, fullName);
       set({
         user,
         token,
         isAuthenticated: true,
         isAuthLoading: false,
         authError: null,
+        verifiedModels,
       });
       get().fetchThreads();
       return true;
@@ -62,6 +65,7 @@ export const createAuthSlice: AppSliceCreator<AuthSlice> = (set, get) => ({
       token: null,
       isAuthenticated: false,
       authError: null,
+      verifiedModels: [],
       turns: [],
       threads: [],
       activeThreadId: null,
@@ -77,6 +81,14 @@ export const createAuthSlice: AppSliceCreator<AuthSlice> = (set, get) => ({
     try {
       const user = await apiClient.getMe();
       set({ user, isAuthenticated: true });
+      if (get().verifiedModels.length === 0) {
+        apiClient
+          .fetchVerifiedModels()
+          .then((verifiedModels) => set({ verifiedModels }))
+          .catch(() => {
+            // Non-fatal: chat will still work with the DB-persisted models.
+          });
+      }
     } catch {
       set({ user: null, token: null, isAuthenticated: false });
     }

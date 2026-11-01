@@ -79,7 +79,7 @@ Format your response using these XML-like tags:
 </constraints>`,
       `Optimize and sharpen this prompt for another AI model:\n\n"""${rawPrompt}"""`,
       token,
-      { maxTokens: 1600, timeoutMs: 35000, temperature: 0.2 }
+      { maxTokens: 800, timeoutMs: 12000, temperature: 0.2 }
     );
 
     if (result.text && result.text.length > 30) {
@@ -203,9 +203,9 @@ export async function optimizeUserPrompt(
               },
             ],
             temperature: 0.2,
-            max_tokens: 1800,
+            max_tokens: 900,
           }),
-          signal: AbortSignal.timeout(30000),
+          signal: AbortSignal.timeout(15000),
         });
 
         if (!response.ok) {

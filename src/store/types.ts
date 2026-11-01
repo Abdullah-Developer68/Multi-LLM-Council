@@ -1,5 +1,11 @@
 import type { StateCreator } from 'zustand';
-import type { MultiAgentTurn, PipelineStage, ThreadSummary, UserAccount } from '../types';
+import type {
+  MultiAgentTurn,
+  PipelineStage,
+  ThreadSummary,
+  UserAccount,
+  VerifiedModelConfig,
+} from '../types';
 
 export interface AuthSlice {
   user: UserAccount | null;
@@ -7,6 +13,8 @@ export interface AuthSlice {
   isAuthenticated: boolean;
   isAuthLoading: boolean;
   authError: string | null;
+  /** Free OpenRouter models verified & persisted on the last login. */
+  verifiedModels: VerifiedModelConfig[];
   login: (email: string, password: string) => Promise<boolean>;
   signup: (email: string, password: string, fullName: string) => Promise<boolean>;
   logout: () => Promise<void>;

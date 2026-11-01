@@ -3,6 +3,7 @@ import { db } from '../../../db';
 import { appAccounts } from '../../../db/schema';
 import { verifyPassword } from '../../../lib/auth/password';
 import { createSession } from '../../../lib/auth/session';
+import { verifyFreeModelsOnLogin } from '../../../lib/ai/model-registry';
 import { eq } from 'drizzle-orm';
 
 export async function POST(request: Request) {
@@ -40,6 +41,16 @@ export async function POST(request: Request) {
       );
     }
 
+    // Verify the free OpenRouter models on every successful login and persist
+    // the result in PostgreSQL. Bounded so login stays snappy; deeper latency
+    // probes continue in the background.
+    const verificationStartedAt = Date.now();
+    const verifiedModels = await verifyFreeModelsOnLogin(4500).catch((err) => {
+      console.warn('Login model verification failed:', err?.message || err);
+      return [];
+    });
+    const modelVerificationMs = Date.now() - verificationStartedAt;
+
     const token = await createSession(account.id);
 
     return Response.json({
@@ -51,6 +62,9 @@ export async function POST(request: Request) {
         fullName: account.fullName,
         createdAt: account.createdAt,
       },
+      verifiedModels,
+      modelsVerified: verifiedModels.length === 3,
+      modelVerificationMs,
       message: 'Logged in successfully.',
     });
   } catch (error: any) {
