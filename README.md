@@ -1,108 +1,60 @@
-# Multi LLM Council
+# Council
 
-A universal full-stack application built with **Expo (React Native)**, **Drizzle ORM**, **Supabase PostgreSQL**, **Zustand**, and **Vercel AI SDK**.
+Ask once, three models answer. A universal Expo app (iOS, Android, web) in which three free frontier models answer every prompt in parallel. Each model works from a brief written by its peer. You can swipe between the answers, mark the strongest, and ask a "chair" model to reconcile them into one consensus.
 
-The system connects three specialized, active free AI models into a collaborative peer-to-peer ring deliberation council:
-1. **Nemotron 3.5 Lightning** (`nvidia/nemotron-3.5-lightning:free`)
-2. **Cohere North Mini** (`cohere/north-mini-code:free`)
-3. **Nemotron Ultra (550B)** (`nvidia/nemotron-3-ultra-550b-a55b:free`)
+**Stack:** Expo SDK 58 · Expo Router (screens + API routes) · React Native 0.88 · Reanimated 4 · Gesture Handler 3 · Zustand · Zod · Drizzle ORM + postgres.js (Supabase Postgres) · OpenRouter free models with a keyless Pollinations fallback · Geist / Geist Mono.
 
----
+## Features
 
-## 🏛️ Core Architecture & Features
+- **Peer-ring briefs.** Seat 1 writes the brief for seat 2, seat 2 for seat 3, and seat 3 for seat 1. Briefs are built deterministically, so no quota is spent before the answers start.
+- **Live token streaming.** `POST /api/council` streams NDJSON events. All three seats type into their cards at once, and the screen shows thinking, writing, and failover states.
+- **Failover on three axes:** to the next free model, then to the next OpenRouter key, then to the keyless tier. A reasoning-only reply (scratch work with no answer) counts as a failure and triggers failover.
+- **Swipeable card deck.** Cards are physically stacked. The top card follows your finger and tilts. Seat tabs show live status, and a sliding underline marks the selected seat.
+- **Consensus.** One tap asks the chair to produce: Verdict, Where the council agrees, Where it differs, Final answer.
+- **Preferences.** Mark the best answer on each turn. These votes feed the seat leaderboard.
+- **Conversation memory.** Follow-ups send a summary of the last 3 turns. You can switch this per message or in Settings.
+- **History drawer.** Opens with an edge swipe or the menu button. It groups threads by Pinned / Today / This week / Earlier, searches titles and prompts on the server, and supports rename, pin, and delete.
+- **Council status.** Shows the verified model per seat, its fallback pool, cooling-down models, and the remaining free quota across keys. It can re-verify the catalog (free) or measure latency (uses up to 3 requests).
+- **Insights.** Totals, 14-day activity, and a per-seat leaderboard (preferences, answer rate, average latency, failover rate, keyless rate).
+- **Light and dark mode.** System, Light, or Dark, saved on the device.
+- **Accounts.** Sessions persist for 30 days. You can rename yourself or sign out of all devices. Threads are scoped to their owner.
+- Copy and share answers, copy code blocks, haptics on native, and Enter to send on web.
 
-### 1. Peer-to-Peer Ring Prompt Optimization
-- **Instant Ring Transformation**: Each council seat deterministically engineers a specialized directive for its peer (role framing, task decomposition, CoT protocol, guardrails) in microseconds — no LLM round-trips are spent before the council answers.
-  - Model 0 prepares the directive for Model 1.
-  - Model 1 prepares the directive for Model 2.
-  - Model 2 prepares the directive for Model 0.
-- **Cross-Model Execution**: Each model answers using the prompt engineered specifically for it by its peer.
-- **Consensus Synthesis**: Synthesizes the council's collective solution with rationales and reasoning steps.
-- **Resilient Fallback**: Auto-mitigates rate limits (HTTP 429), timeouts (20s per candidate) and upstream outages by rotating through verified free models, preserving the seat's `agentId` (and therefore its NVIDIA/Cohere logo).
-- **Verified Free Models**: On every login the 3 seat models are re-checked against the live OpenRouter catalog (`GET /api/v1/models`), confirmed to be strictly free, probed for availability/latency (rate-limited to protect the daily free quota), and persisted in the `verified_free_models` PostgreSQL table.
-- **Optional Deep Optimization**: `runMultiAgentPipeline(prompt, threadId, apiKey, { livePromptOptimization: true })` restores the slower LLM-based prompt rewriting stage.
+## Setup
 
-### 2. Physical Stacked Cards Deck (Gesture Swipe)
-- **Deck of Cards**: AI replies are displayed in a stacked card deck where cards 2 and 3 visibly peek from underneath (offset by 10px/20px and scaled down), clearly signaling cards are stacked behind.
-- **Swipe Interactions**: Horizontal swipe gesture using `PanResponder` to discard/promote cards, with spring-back and jump indicators.
-- **Original Model Logos**: Authentic vector SVG brand logos sourced from the `dashboardicons.com` MCP server for NVIDIA and Cohere.
-- **Unified Dark Theme**: Consistent Slate/Zinc theme with high-contrast readability and clean neutral cards.
-
-### 3. Structured Prompt Inspector
-- Instead of raw monospace or simple markdown, an interactive accordion decomposes the engineered directive into:
-  - **Optimizer Identity Badge**
-  - **Cognitive Persona & Assigned Stance**
-  - **Execution Objective**
-  - **Target User Task**
-  - **Reasoning Protocol Steps**
-  - **Guardrails & Negative Constraints**
-  - **Mode Toggle**: Structured view vs. raw directive with 1-tap copy.
-
-### 4. Full-Stack Backend (Expo Router API Routes)
-- Built directly inside Expo Router:
-  - `POST /api/auth/signup`: Password hashing via `scrypt` with random salts.
-  - `POST /api/auth/login`: Constant-time hash verification and 30-day session issuance.
-  - `POST /api/auth/logout`: Revokes active sessions in Supabase.
-  - `GET /api/auth/me`: Session validation endpoint.
-  - `POST /api/multi-agent`: Peer prompt ring execution and turn persistence.
-  - `GET / POST /api/models/verify`: Verifies the council's free OpenRouter models against the live catalog, probes availability/latency (`?deep=1` / `{ "deep": true }`), and returns the rows persisted in `verified_free_models`.
-  - `GET / POST /api/threads`: Discussion session management.
-  - `GET /api/threads/[threadId]/messages`: Thread deliberation history.
-  - `GET / POST /api/users`: Drizzle ORM operations on the `users` table.
-
-### 5. Zustand State Management (Slices Pattern)
-- Single store with zero prop drilling:
-  - `AuthSlice`: Session state, login, signup, logout.
-  - `ChatSlice`: Turns, thread switching, multi-stage thinking messaging, active card views.
-  - `UISlice`: History drawer slide-out.
-
----
-
-## 🚀 Getting Started
-
-### 1. Install Dependencies
 ```bash
 npm install
+cp .env.example .env   # fill in the values below
+npx expo start         # press w for web, or scan the QR code with a dev build / Expo Go
 ```
 
-### 2. Configure Environment Variables
-Copy `.env.example` to `.env` and fill in your Supabase connection string and OpenRouter API key:
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | Postgres connection string (Supabase transaction pooler works; `localhost` disables TLS). |
+| `OPENROUTER_API_KEY` | Primary OpenRouter key. |
+| `OPENROUTER_FALLBACK_KEYS` / `OPENROUTER_API_KEYS` | Optional extra keys (comma separated), used once a key hits its 50/day free cap. |
+| `EXPO_PUBLIC_API_URL` | Optional. Points a native build at a deployed API instead of the dev server. |
+
+The schema bootstraps itself. On first request, the server creates any missing tables and adds the v2 columns (`chat_threads.account_id`, `chat_threads.pinned`, `multi_agent_turns.meta`). It only adds tables and columns and never drops or rewrites data. `npx drizzle-kit push` also works against `src/server/db/schema.ts`.
+
+## Scripts
+
 ```bash
-cp .env.example .env
+npm run typecheck       # tsc --noEmit
+npm run lint            # expo lint
+npm test                # smoke-tests a running dev server (no model quota used)
+npm run test:council    # + one live council turn and a consensus (~4 free requests)
 ```
 
-```env
-DATABASE_URL="postgresql://postgres.[REF]:[PASSWORD]@aws-0-eu-west-1.pooler.supabase.com:6543/postgres"
-OPENROUTER_API_KEY="sk-or-v1-..."
+## Layout
+
 ```
-
-### 3. Push Database Schema to Supabase
-```bash
-npx drizzle-kit push
+src/
+  app/                 screens (index, sign-in, settings, council, insights) + api/ routes
+  server/              server-only code: db, auth, ai (registry, rotation, providers, council, synthesis)
+  shared/              types + seat definitions used by both client and server
+  store/               Zustand store (session, prefs, threads, chat streaming, ui)
+  theme/               design tokens (light/dark palettes, Geist type scale, springs) + provider
+  components/ui        primitives: Button, TextField, Segmented, Toggle, Sheet, Skeleton, Toast…
+  components/chat      composer, swipe deck, seat card, directive inspector, drawer, turns
 ```
-> `verified_free_models` is also created automatically (`CREATE TABLE IF NOT EXISTS`) the first time the app verifies models, so it works without a manual migration.
-
-### 4. Start the Application
-```bash
-npx expo start
-```
-- Scan the QR code with **Expo Go** on your Android or iOS device.
-- Or press `w` to run in the web browser.
-
-### Verification scripts
-```bash
-npx tsx --env-file=.env scripts/test-login-and-chat.ts   # login -> model verification -> live chat -> DB checks
-npx tsx --env-file=.env scripts/test-model-rotation.ts   # rotation/failover unit + live tests
-```
-
-> **OpenRouter free tier**: accounts with fewer than 10 credits get **50 free-model requests per day** (plus 20/min). The app fast-fails with a clear message when that account-wide quota is exhausted instead of hanging, and limits model probes so they don't starve chat of requests.
-
----
-
-## 🛠️ Tech Stack
-- **Framework**: Expo SDK 58 (Expo Router v4)
-- **Frontend**: React Native, React Native Reanimated, React Native Gesture Handler, Lucide Icons, React Native SVG
-- **Database / ORM**: Supabase PostgreSQL, Drizzle ORM, postgres.js
-- **State Management**: Zustand (single store with slices)
-- **Validation**: Zod
-- **AI Integration**: Vercel AI SDK (`ai`, `@ai-sdk/openai`), OpenRouter API

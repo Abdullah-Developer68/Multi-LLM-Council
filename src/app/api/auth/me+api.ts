@@ -1,45 +1,18 @@
-import { extractBearerToken, validateSession } from '../../../lib/auth/session';
-import { verifyFreeModelsOnLogin } from '../../../lib/ai/model-registry';
+import { eq } from 'drizzle-orm';
 
-export async function GET(request: Request) {
-  try {
-    const token = extractBearerToken(request);
-    if (!token) {
-      return Response.json(
-        { success: false, error: 'Unauthorized: missing authorization header' },
-        { status: 401 }
-      );
-    }
+import { requireUser, toUserAccount } from '../../../server/auth/session';
+import { db } from '../../../server/db/client';
+import { appAccounts } from '../../../server/db/schema';
+import { json, readBody, route } from '../../../server/http';
+import { updateProfileSchema } from '../../../server/validation';
 
-    const sessionInfo = await validateSession(token);
-    if (!sessionInfo) {
-      return Response.json(
-        { success: false, error: 'Unauthorized: session expired or invalid' },
-        { status: 401 }
-      );
-    }
+export const GET = route(async (request) => {
+  return json({ user: await requireUser(request) });
+});
 
-    // Session restore counts as a login: keep the verified free model
-    // configuration in PostgreSQL fresh (bounded, probes continue in background).
-    const verificationStartedAt = Date.now();
-    const verifiedModels = await verifyFreeModelsOnLogin(4500).catch((err) => {
-      console.warn('Session model verification failed:', err?.message || err);
-      return [];
-    });
-    const modelVerificationMs = Date.now() - verificationStartedAt;
-
-    return Response.json({
-      success: true,
-      user: sessionInfo.account,
-      verifiedModels,
-      modelsVerified: verifiedModels.length === 3,
-      modelVerificationMs,
-    });
-  } catch (error: any) {
-    console.error('Me endpoint error:', error);
-    return Response.json(
-      { success: false, error: error?.message || 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
+export const PATCH = route(async (request) => {
+  const user = await requireUser(request);
+  const { fullName } = await readBody(request, updateProfileSchema);
+  const [updated] = await db.update(appAccounts).set({ fullName }).where(eq(appAccounts.id, user.id)).returning();
+  return json({ user: toUserAccount(updated) });
+});

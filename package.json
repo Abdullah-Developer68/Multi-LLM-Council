@@ -1,10 +1,13 @@
 {
   "name": "tra-app",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "main": "expo-router/entry",
   "dependencies": {
     "@ai-sdk/openai": "^4.0.106",
+    "@expo-google-fonts/geist": "^0.4.2",
+    "@expo-google-fonts/geist-mono": "^0.4.3",
     "@expo/ui": "~58.0.25",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "ai": "^7.0.159",
     "dotenv": "^18.0.9",
     "drizzle-orm": "^0.45.4",
@@ -14,6 +17,7 @@
     "expo-device": "~58.0.5",
     "expo-font": "~58.0.11",
     "expo-glass-effect": "~58.0.5",
+    "expo-haptics": "~58.0.8",
     "expo-image": "~58.0.18",
     "expo-linking": "~58.0.15",
     "expo-router": "~58.0.28",
@@ -48,13 +52,13 @@
   },
   "scripts": {
     "start": "expo start",
-    "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test": "npx tsx scripts/test-ui-units.ts && npx tsx --env-file=.env scripts/test-all-features.ts",
-    "test:login-chat": "npx tsx --env-file=.env scripts/test-login-and-chat.ts"
+    "test": "node scripts/smoke.mjs",
+    "typecheck": "tsc --noEmit",
+    "test:council": "node scripts/smoke.mjs --council"
   },
   "private": true
 }

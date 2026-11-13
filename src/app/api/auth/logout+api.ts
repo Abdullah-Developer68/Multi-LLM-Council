@@ -1,29 +1,14 @@
-import { extractBearerToken, revokeSession } from '../../../lib/auth/session';
+import { extractBearerToken, findSession, revokeAllSessions, revokeSession } from '../../../server/auth/session';
+import { json, readBody, route } from '../../../server/http';
+import { logoutSchema } from '../../../server/validation';
 
-export async function POST(request: Request) {
-  try {
-    let token = extractBearerToken(request);
-    if (!token) {
-      try {
-        const body = await request.json();
-        if (typeof body?.token === 'string') {
-          token = body.token;
-        }
-      } catch {
-        // no body
-      }
-    }
-
-    if (token) {
-      await revokeSession(token);
-    }
-
-    return Response.json({ success: true, message: 'Logged out successfully.' });
-  } catch (error: any) {
-    console.error('Logout error:', error);
-    return Response.json(
-      { success: false, error: error?.message || 'Internal server error' },
-      { status: 500 }
-    );
+export const POST = route(async (request) => {
+  const token = extractBearerToken(request);
+  const { everywhere } = await readBody(request, logoutSchema);
+  if (token) {
+    const user = everywhere ? await findSession(token) : null;
+    if (user) await revokeAllSessions(user.id);
+    else await revokeSession(token);
   }
-}
+  return json({ ok: true });
+});

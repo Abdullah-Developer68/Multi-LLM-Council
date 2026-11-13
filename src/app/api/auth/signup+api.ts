@@ -1,82 +1,25 @@
-import { signUpSchema } from '../../../lib/validation';
-import { db } from '../../../db';
-import { appAccounts } from '../../../db/schema';
-import { hashPassword } from '../../../lib/auth/password';
-import { createSession } from '../../../lib/auth/session';
-import { verifyFreeModelsOnLogin } from '../../../lib/ai/model-registry';
 import { eq } from 'drizzle-orm';
 
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const parsed = signUpSchema.safeParse(body);
-    if (!parsed.success) {
-      return Response.json(
-        { success: false, error: parsed.error.issues[0]?.message || 'Invalid input' },
-        { status: 400 }
-      );
-    }
+import { verifyInBackground } from '../../../server/ai/registry';
+import { hashPassword } from '../../../server/auth/password';
+import { createSession, toUserAccount } from '../../../server/auth/session';
+import { db } from '../../../server/db/client';
+import { appAccounts } from '../../../server/db/schema';
+import { HttpError, json, readBody, route } from '../../../server/http';
+import { signUpSchema } from '../../../server/validation';
 
-    const { email, password, fullName } = parsed.data;
-    const normalizedEmail = email.trim().toLowerCase();
+export const POST = route(async (request) => {
+  const { email, password, fullName } = await readBody(request, signUpSchema);
 
-    // Check if account already exists
-    const existing = await db
-      .select({ id: appAccounts.id })
-      .from(appAccounts)
-      .where(eq(appAccounts.email, normalizedEmail))
-      .limit(1);
+  const [existing] = await db.select({ id: appAccounts.id }).from(appAccounts).where(eq(appAccounts.email, email)).limit(1);
+  if (existing) throw new HttpError(409, 'An account with this email already exists. Try signing in.');
 
-    if (existing.length > 0) {
-      return Response.json(
-        { success: false, error: 'An account with this email already exists.' },
-        { status: 409 }
-      );
-    }
+  const [account] = await db
+    .insert(appAccounts)
+    .values({ email, fullName, passwordHash: await hashPassword(password), createdAt: new Date() })
+    .returning();
 
-    const passwordHash = await hashPassword(password);
-    const [inserted] = await db
-      .insert(appAccounts)
-      .values({
-        email: normalizedEmail,
-        passwordHash,
-        fullName: fullName.trim(),
-        createdAt: new Date(),
-      })
-      .returning({
-        id: appAccounts.id,
-        email: appAccounts.email,
-        fullName: appAccounts.fullName,
-        createdAt: appAccounts.createdAt,
-      });
-
-    const token = await createSession(inserted.id);
-
-    // Fresh account creation is also a login: verify free models and persist them.
-    const verificationStartedAt = Date.now();
-    const verifiedModels = await verifyFreeModelsOnLogin(4500).catch((err) => {
-      console.warn('Signup model verification failed:', err?.message || err);
-      return [];
-    });
-    const modelVerificationMs = Date.now() - verificationStartedAt;
-
-    return Response.json(
-      {
-        success: true,
-        token,
-        user: inserted,
-        verifiedModels,
-        modelsVerified: verifiedModels.length === 3,
-        modelVerificationMs,
-        message: 'Account created successfully.',
-      },
-      { status: 201 }
-    );
-  } catch (error: any) {
-    console.error('Signup error:', error);
-    return Response.json(
-      { success: false, error: error?.message || 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
+  const token = await createSession(account.id);
+  verifyInBackground();
+  return json({ token, user: toUserAccount(account) }, 201);
+});

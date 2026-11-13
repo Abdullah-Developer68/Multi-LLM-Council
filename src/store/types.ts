@@ -1,50 +1,95 @@
 import type { StateCreator } from 'zustand';
-import type {
-  MultiAgentTurn,
-  PipelineStage,
-  ThreadSummary,
-  UserAccount,
-  VerifiedModelConfig,
-} from '../types';
 
-export interface AuthSlice {
-  user: UserAccount | null;
+import type { ThemePreference } from '@/theme/tokens';
+import type { CouncilTurn, SeatResponse, ThreadSummary, UserAccount } from '@/shared/types';
+
+export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error';
+
+export interface SessionSlice {
   token: string | null;
-  isAuthenticated: boolean;
-  isAuthLoading: boolean;
-  authError: string | null;
-  /** Free OpenRouter models verified & persisted on the last login. */
-  verifiedModels: VerifiedModelConfig[];
-  login: (email: string, password: string) => Promise<boolean>;
-  signup: (email: string, password: string, fullName: string) => Promise<boolean>;
-  logout: () => Promise<void>;
-  checkSession: () => Promise<void>;
-  clearAuthError: () => void;
+  user: UserAccount | null;
+  hydrated: boolean;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, fullName: string) => Promise<void>;
+  signOut: (opts?: { everywhere?: boolean; remote?: boolean }) => Promise<void>;
+  refreshUser: () => Promise<void>;
+  updateName: (fullName: string) => Promise<void>;
+}
+
+export interface PrefsSlice {
+  themePreference: ThemePreference;
+  hapticsEnabled: boolean;
+  contextEnabled: boolean;
+  setThemePreference: (value: ThemePreference) => void;
+  setHapticsEnabled: (value: boolean) => void;
+  setContextEnabled: (value: boolean) => void;
+}
+
+export interface ThreadsSlice {
+  threads: ThreadSummary[];
+  threadsStatus: LoadStatus;
+  threadQuery: string;
+  loadThreads: (query?: string) => Promise<void>;
+  renameThread: (id: string, title: string) => Promise<void>;
+  togglePin: (id: string) => Promise<void>;
+  deleteThread: (id: string) => Promise<void>;
+}
+
+export type LiveSeatStatus = 'waiting' | 'thinking' | 'streaming' | 'done' | 'error';
+
+export interface LiveSeat {
+  seatId: string;
+  status: LiveSeatStatus;
+  model: string;
+  byName: string;
+  directive: string;
+  text: string;
+  rotations: number;
+  response?: SeatResponse;
+}
+
+export interface LiveTurn {
+  id: string;
+  prompt: string;
+  /** Thread the turn was sent from (null for a new conversation). */
+  originThreadId: string | null;
+  title: string | null;
+  startedAt: number;
+  seats: Record<string, LiveSeat>;
 }
 
 export interface ChatSlice {
-  turns: MultiAgentTurn[];
-  threads: ThreadSummary[];
   activeThreadId: string | null;
-  activeStage: PipelineStage;
-  stageMessage: string;
-  chatError: string | null;
-  pendingPrompt: string | null;
-  activeViews: Record<string, string>; // turnId -> active view ('all_models' | agentId)
-  fetchThreads: () => Promise<void>;
-  selectThread: (threadId: string | null) => Promise<void>;
-  setActiveView: (turnId: string, view: string) => void;
-  submitPrompt: (prompt: string) => Promise<void>;
-  resetChat: () => void;
-  clearChatError: () => void;
+  activeTitle: string | null;
+  turns: CouncilTurn[];
+  threadStatus: LoadStatus;
+  live: LiveTurn | null;
+  chatError: { message: string; prompt: string } | null;
+  draft: string;
+  synthesizing: Record<string, boolean>;
+  openThread: (id: string) => Promise<void>;
+  newChat: () => void;
+  setDraft: (text: string) => void;
+  send: (prompt: string) => Promise<void>;
+  cancel: () => void;
+  dismissError: () => void;
+  vote: (turnId: string, seatId: string) => Promise<void>;
+  synthesize: (turnId: string) => Promise<void>;
+}
+
+export interface Toast {
+  id: number;
+  message: string;
+  tone: 'neutral' | 'success' | 'danger';
 }
 
 export interface UISlice {
-  isSidebarOpen: boolean;
-  toggleSidebar: () => void;
-  setSidebarOpen: (open: boolean) => void;
+  drawerOpen: boolean;
+  setDrawerOpen: (open: boolean) => void;
+  toasts: Toast[];
+  showToast: (message: string, tone?: Toast['tone']) => void;
+  dismissToast: (id: number) => void;
 }
 
-export type AppStore = AuthSlice & ChatSlice & UISlice;
-
-export type AppSliceCreator<T> = StateCreator<AppStore, [], [], T>;
+export type AppStore = SessionSlice & PrefsSlice & ThreadsSlice & ChatSlice & UISlice;
+export type SliceCreator<T> = StateCreator<AppStore, [['zustand/persist', unknown]], [], T>;
