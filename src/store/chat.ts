@@ -58,8 +58,10 @@ export const createChatSlice: SliceCreator<ChatSlice> = (set, get) => {
 
   const finishTurn = (state: AppStore, live: LiveTurn, turn: CouncilTurn) => {
     const visible = state.activeThreadId === live.originThreadId;
+    const { live: liveSelection, ...selection } = state.seatSelection;
     set({
       live: null,
+      seatSelection: liveSelection ? { ...selection, [turn.turnId]: liveSelection } : selection,
       ...(visible
         ? { turns: [...state.turns, turn], activeThreadId: turn.threadId, activeTitle: live.title ?? state.activeTitle }
         : {}),
@@ -125,6 +127,9 @@ export const createChatSlice: SliceCreator<ChatSlice> = (set, get) => {
     chatError: null,
     draft: '',
     synthesizing: {},
+    seatSelection: {},
+
+    selectSeat: (key, index) => set({ seatSelection: { ...get().seatSelection, [key]: { index, picked: true } } }),
 
     openThread: async (id) => {
       const summary = get().threads.find((t) => t.id === id);
@@ -162,7 +167,8 @@ export const createChatSlice: SliceCreator<ChatSlice> = (set, get) => {
       };
       controller = new AbortController();
       pending = {};
-      set({ live, chatError: null, draft: '' });
+      const { live: _stale, ...selection } = get().seatSelection;
+      set({ live, chatError: null, draft: '', seatSelection: selection });
 
       try {
         await streamCouncil(

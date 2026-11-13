@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Segmented, Toggle } from '@/components/ui/controls';
 import { Card, Divider, ScreenHeader, SectionHeader } from '@/components/ui/layout';
 import { TextField } from '@/components/ui/text-field';
-import { MonoLabel, Txt } from '@/components/ui/text';
+import { Label, Txt } from '@/components/ui/text';
 import { initials } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { useAppStore } from '@/store';
@@ -95,7 +95,7 @@ export default function SettingsScreen() {
             <Txt variant="callout" tone="secondary" numberOfLines={1}>
               {user?.email}
             </Txt>
-            {memberSince ? <MonoLabel style={styles.since}>Member since {memberSince}</MonoLabel> : null}
+            {memberSince ? <Label style={styles.since}>Member since {memberSince}</Label> : null}
           </View>
         </Animated.View>
 
@@ -178,9 +178,9 @@ export default function SettingsScreen() {
           </Card>
         </Animated.View>
 
-        <MonoLabel style={styles.version}>
+        <Label style={styles.version}>
           Council v{Constants.expoConfig?.version ?? '2.0.0'} · Expo SDK 58
-        </MonoLabel>
+        </Label>
       </ScrollView>
     </SafeAreaView>
   );

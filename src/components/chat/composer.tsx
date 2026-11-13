@@ -6,10 +6,10 @@ import Animated, { interpolate, interpolateColor, useAnimatedStyle, useDerivedVa
 import { haptic } from '@/lib/haptics';
 import { useAppStore } from '@/store';
 import { fonts, makeStyles, radius, springs, useTheme } from '@/theme';
-import { MonoLabel, Txt } from '../ui/text';
+import { Txt } from '../ui/text';
 
-const MIN_HEIGHT = 44;
-const MAX_HEIGHT = 168;
+const MIN_HEIGHT = 26;
+const MAX_HEIGHT = 200;
 const LIMIT = 8000;
 
 function SendButton({ live, canSend, onSend, onStop }: { live: boolean; canSend: boolean; onSend: () => void; onStop: () => void }) {
@@ -17,8 +17,8 @@ function SendButton({ live, canSend, onSend, onStop }: { live: boolean; canSend:
   const active = live || canSend;
   const progress = useDerivedValue(() => withSpring(active ? 1 : 0, springs.snappy), [active]);
   const style = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(progress.get(), [0, 1], [colors.surfaceSunken, colors.primary]),
-    transform: [{ scale: interpolate(progress.get(), [0, 1], [0.92, 1]) }],
+    backgroundColor: interpolateColor(progress.get(), [0, 1], [colors.hover, colors.primary]),
+    transform: [{ scale: interpolate(progress.get(), [0, 1], [0.94, 1]) }],
   }));
   return (
     <Pressable
@@ -34,22 +34,23 @@ function SendButton({ live, canSend, onSend, onStop }: { live: boolean; canSend:
       disabled={!active}
       hitSlop={6}
       accessibilityRole="button"
-      accessibilityLabel={live ? 'Stop the council' : 'Send to the council'}
+      accessibilityLabel={live ? 'Stop generating' : 'Send message'}
     >
       <Animated.View style={[{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }, style]}>
         {live ? (
-          <Square size={13} color={colors.onPrimary} fill={colors.onPrimary} />
+          <Square size={12} color={colors.onPrimary} fill={colors.onPrimary} />
         ) : (
-          <ArrowUp size={18} color={canSend ? colors.onPrimary : colors.textTertiary} strokeWidth={2.2} />
+          <ArrowUp size={19} color={canSend ? colors.onPrimary : colors.textTertiary} strokeWidth={2.4} />
         )}
       </Animated.View>
     </Pressable>
   );
 }
 
-export function Composer() {
+/** Rounded message box: auto-growing input, memory toggle, send/stop button. */
+export function Composer({ autoFocus = false }: { autoFocus?: boolean }) {
   const styles = useStyles();
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
   const draft = useAppStore((s) => s.draft);
   const setDraft = useAppStore((s) => s.setDraft);
   const send = useAppStore((s) => s.send);
@@ -59,7 +60,6 @@ export function Composer() {
   const contextEnabled = useAppStore((s) => s.contextEnabled);
   const setContextEnabled = useAppStore((s) => s.setContextEnabled);
   const [height, setHeight] = useState(MIN_HEIGHT);
-  const [focused, setFocused] = useState(false);
 
   const canSend = draft.trim().length > 0 && draft.length <= LIMIT && !live;
   const submit = () => {
@@ -79,82 +79,89 @@ export function Composer() {
   };
 
   return (
-    <View style={[styles.wrap, focused && { borderColor: colors.borderStrong }]}>
-      <TextInput
-        value={draft}
-        onChangeText={setDraft}
-        onKeyPress={onKeyPress}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        multiline
-        placeholder={inThread ? 'Follow up with the council…' : 'Ask the council anything…'}
-        placeholderTextColor={colors.textTertiary}
-        selectionColor={colors.accent}
-        onContentSizeChange={(e) =>
-          setHeight(Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, Math.ceil(e.nativeEvent.contentSize.height))))
-        }
-        style={[styles.input, { height, color: colors.text }, Platform.OS === 'web' && styles.webInput]}
-        accessibilityLabel="Message"
-      />
-      <View style={styles.row}>
-        {inThread ? (
-          <Pressable
-            onPress={() => {
-              haptic.select();
-              setContextEnabled(!contextEnabled);
-            }}
-            style={[styles.chip, contextEnabled && { backgroundColor: colors.accentSoft, borderColor: 'transparent' }]}
-            accessibilityRole="switch"
-            accessibilityState={{ checked: contextEnabled }}
-            accessibilityLabel="Use earlier turns as context"
-          >
-            <Layers size={13} color={contextEnabled ? colors.accent : colors.textTertiary} strokeWidth={1.8} />
-            <Txt variant="caption" color={contextEnabled ? colors.accent : colors.textTertiary}>
-              {contextEnabled ? 'Memory on' : 'Memory off'}
+    <View style={styles.outer}>
+      <View style={[styles.box, scheme === 'light' && styles.boxLight]}>
+        <TextInput
+          value={draft}
+          onChangeText={setDraft}
+          onKeyPress={onKeyPress}
+          autoFocus={autoFocus}
+          multiline
+          placeholder={inThread ? 'Ask a follow-up' : 'Ask anything'}
+          placeholderTextColor={colors.textTertiary}
+          selectionColor={colors.accent}
+          onContentSizeChange={(e) =>
+            setHeight(Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, Math.ceil(e.nativeEvent.contentSize.height))))
+          }
+          style={[styles.input, { height, color: colors.text }, Platform.OS === 'web' && styles.webInput]}
+          accessibilityLabel="Message"
+        />
+        <View style={styles.row}>
+          {inThread ? (
+            <Pressable
+              onPress={() => {
+                haptic.select();
+                setContextEnabled(!contextEnabled);
+              }}
+              style={[styles.tool, contextEnabled && { backgroundColor: colors.accentSoft, borderColor: 'transparent' }]}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: contextEnabled }}
+              accessibilityLabel="Remember earlier messages"
+            >
+              <Layers size={14} color={contextEnabled ? colors.accent : colors.textSecondary} strokeWidth={1.8} />
+              <Txt variant="caption" color={contextEnabled ? colors.accent : colors.textSecondary}>
+                Memory
+              </Txt>
+            </Pressable>
+          ) : null}
+          <View style={styles.flex} />
+          {draft.length > LIMIT * 0.8 ? (
+            <Txt variant="caption" tone={draft.length > LIMIT ? 'danger' : 'tertiary'}>
+              {draft.length}/{LIMIT}
             </Txt>
-          </Pressable>
-        ) : (
-          <MonoLabel>3 seats · free models</MonoLabel>
-        )}
-        <View style={styles.flex} />
-        {draft.length > LIMIT * 0.8 ? (
-          <Txt variant="mono" tone={draft.length > LIMIT ? 'danger' : 'tertiary'}>
-            {draft.length}/{LIMIT}
-          </Txt>
-        ) : null}
-        <SendButton live={live} canSend={canSend} onSend={submit} onStop={cancel} />
+          ) : null}
+          <SendButton live={live} canSend={canSend} onSend={submit} onStop={cancel} />
+        </View>
       </View>
+      <Txt variant="caption" tone="tertiary" style={styles.disclaimer}>
+        Council uses free AI models and can make mistakes. Check important info.
+      </Txt>
     </View>
   );
 }
 
 const useStyles = makeStyles((c) => ({
-  wrap: {
-    backgroundColor: c.surface,
+  outer: { gap: 8 },
+  box: {
+    backgroundColor: c.composer,
+    borderRadius: 28,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+    gap: 8,
+  },
+  boxLight: {
     borderWidth: 1,
     borderColor: c.border,
-    borderRadius: radius.xl,
-    paddingHorizontal: 14,
-    paddingTop: 6,
-    paddingBottom: 8,
     shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 2,
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
-  input: { fontFamily: fonts.regular, fontSize: 15.5, lineHeight: 22, paddingTop: 10, paddingBottom: 6 },
+  input: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 24, paddingTop: 0, paddingBottom: 0, paddingHorizontal: 2 },
   webInput: { outlineStyle: 'none' } as object,
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  chip: {
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  tool: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    height: 28,
-    paddingHorizontal: 10,
+    height: 32,
+    paddingHorizontal: 12,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: c.border,
   },
+  disclaimer: { textAlign: 'center' },
   flex: { flex: 1 },
 }));

@@ -6,7 +6,7 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { radius, useTheme } from '@/theme';
 import { IconButton } from './button';
 import { PressableScale } from './pressable-scale';
-import { MonoLabel, Txt } from './text';
+import { Label, Txt } from './text';
 
 export function Card({ children, style, padded = true }: { children: ReactNode; style?: StyleProp<ViewStyle>; padded?: boolean }) {
   const { colors } = useTheme();
@@ -33,8 +33,8 @@ export function SectionHeader({ index, title, trailing }: { index?: string; titl
   return (
     <View style={styles.sectionHeader}>
       <View style={styles.sectionLeft}>
-        {index ? <MonoLabel>[ {index} ]</MonoLabel> : null}
-        <MonoLabel tone="secondary">{title}</MonoLabel>
+        {index ? <Label>[ {index} ]</Label> : null}
+        <Label tone="secondary">{title}</Label>
       </View>
       {trailing}
     </View>

@@ -36,10 +36,10 @@ export function Txt({ variant = 'body', tone = 'primary', color, style, ...rest 
   return <Text {...rest} style={[type[variant], { color: color ?? toneColor(colors, tone) }, style]} />;
 }
 
-/** Mono micro-label, e.g. `[ 01 ]` or `COUNCIL`. */
-export function MonoLabel({ children, tone = 'tertiary', style, ...rest }: TxtProps) {
+/** Small secondary label used for section titles, metadata and hints. */
+export function Label({ children, tone = 'tertiary', ...rest }: TxtProps) {
   return (
-    <Txt variant="label" tone={tone} style={[{ textTransform: 'uppercase' }, style]} {...rest}>
+    <Txt variant="label" tone={tone} {...rest}>
       {children}
     </Txt>
   );

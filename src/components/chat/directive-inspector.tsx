@@ -1,14 +1,13 @@
 import * as Clipboard from 'expo-clipboard';
-import { ChevronDown, Copy, CornerDownRight } from 'lucide-react-native';
+import { ChevronRight } from 'lucide-react-native';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, useAnimatedStyle, useDerivedValue, withSpring } from 'react-native-reanimated';
 
 import { haptic } from '@/lib/haptics';
 import { useAppStore } from '@/store';
-import { makeStyles, radius, springs, useTheme } from '@/theme';
-import { Segmented } from '../ui/controls';
-import { MonoLabel, Txt } from '../ui/text';
+import { makeStyles, springs, useTheme } from '@/theme';
+import { Txt } from '../ui/text';
 
 interface ParsedDirective {
   role?: string;
@@ -35,15 +34,18 @@ function parse(directive: string): ParsedDirective {
   };
 }
 
-/** Expandable view of the brief a seat received from its ring peer. */
+/**
+ * "Brief from …" disclosure — like a chat app's "Thought for 5s" row. Shows
+ * the brief this model received from its peer in the ring.
+ */
 export function DirectiveInspector({ byName, directive }: { byName: string; directive: string }) {
   const styles = useStyles();
   const { colors } = useTheme();
   const showToast = useAppStore((s) => s.showToast);
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<'structured' | 'raw'>('structured');
-  const rotation = useDerivedValue(() => withSpring(open ? 180 : 0, springs.snappy), [open]);
-  const chevronStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotation.get()}deg` }] }));
+  const [raw, setRaw] = useState(false);
+  const rotation = useDerivedValue(() => withSpring(open ? 90 : 0, springs.snappy), [open]);
+  const chevron = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotation.get()}deg` }] }));
   const parsed = parse(directive);
 
   return (
@@ -56,130 +58,74 @@ export function DirectiveInspector({ byName, directive }: { byName: string; dire
         style={styles.toggle}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
+        hitSlop={6}
       >
-        <CornerDownRight size={14} color={colors.textTertiary} strokeWidth={1.7} />
-        <Txt variant="caption" tone="secondary" style={styles.toggleText} numberOfLines={1}>
-          Brief written by <Txt variant="caption">{byName}</Txt>
+        <Txt variant="callout" tone="secondary">
+          Brief from {byName}
         </Txt>
-        <Animated.View style={chevronStyle}>
-          <ChevronDown size={15} color={colors.textTertiary} strokeWidth={1.7} />
+        <Animated.View style={chevron}>
+          <ChevronRight size={15} color={colors.textSecondary} strokeWidth={2} />
         </Animated.View>
       </Pressable>
 
       {open ? (
         <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(120)} style={styles.panel}>
-          <View style={styles.toolbar}>
-            <View style={styles.segmented}>
-              <Segmented
-                value={mode}
-                onChange={setMode}
-                options={[
-                  { value: 'structured', label: 'Structured' },
-                  { value: 'raw', label: 'Raw' },
-                ]}
-              />
-            </View>
-            <Pressable
-              onPress={async () => {
-                await Clipboard.setStringAsync(directive);
-                haptic.success();
-                showToast('Brief copied');
-              }}
-              hitSlop={8}
-              accessibilityLabel="Copy brief"
-              style={styles.copy}
-            >
-              <Copy size={15} color={colors.textSecondary} strokeWidth={1.7} />
-            </Pressable>
-          </View>
-
-          {mode === 'raw' ? (
+          {raw ? (
             <Txt variant="mono" tone="secondary" selectable>
               {directive}
             </Txt>
           ) : (
             <View style={styles.sections}>
-              {parsed.role ? (
-                <Section label="Role">
-                  <Txt variant="calloutMedium">{parsed.role}</Txt>
-                </Section>
-              ) : null}
-              {parsed.context.length ? (
-                <Section label="Context carried over">
-                  {parsed.context.map((line, i) => (
-                    <Txt key={i} variant="caption" tone="secondary" numberOfLines={3}>
-                      {line}
-                    </Txt>
-                  ))}
-                </Section>
-              ) : null}
+              {parsed.role ? <Line label="Role" text={parsed.role} /> : null}
+              {parsed.context.length ? <Line label="Context" text={parsed.context.join('\n')} /> : null}
               {parsed.protocol.length ? (
-                <Section label="Protocol">
-                  {parsed.protocol.map((step, i) => (
-                    <View key={i} style={styles.step}>
-                      <Txt variant="mono" tone="tertiary" style={styles.stepIndex}>
-                        {String(i + 1).padStart(2, '0')}
-                      </Txt>
-                      <Txt variant="callout" style={styles.flex}>
-                        {step}
-                      </Txt>
-                    </View>
-                  ))}
-                </Section>
+                <Line label="Approach" text={parsed.protocol.map((p, i) => `${i + 1}. ${p}`).join('\n')} />
               ) : null}
-              {parsed.constraints.length ? (
-                <Section label="Guardrails">
-                  {parsed.constraints.map((c, i) => (
-                    <View key={i} style={styles.step}>
-                      <View style={[styles.dot, { backgroundColor: colors.textTertiary }]} />
-                      <Txt variant="callout" tone="secondary" style={styles.flex}>
-                        {c}
-                      </Txt>
-                    </View>
-                  ))}
-                </Section>
-              ) : null}
+              {parsed.constraints.length ? <Line label="Rules" text={parsed.constraints.map((c) => `• ${c}`).join('\n')} /> : null}
             </View>
           )}
+          <View style={styles.links}>
+            <Pressable onPress={() => setRaw((r) => !r)} hitSlop={6}>
+              <Txt variant="caption" tone="accent">
+                {raw ? 'Show summary' : 'Show full brief'}
+              </Txt>
+            </Pressable>
+            <Pressable
+              hitSlop={6}
+              onPress={async () => {
+                await Clipboard.setStringAsync(directive);
+                haptic.success();
+                showToast('Brief copied');
+              }}
+            >
+              <Txt variant="caption" tone="accent">
+                Copy
+              </Txt>
+            </Pressable>
+          </View>
         </Animated.View>
       ) : null}
     </View>
   );
 }
 
-function Section({ label, children }: { label: string; children: React.ReactNode }) {
+function Line({ label, text }: { label: string; text: string }) {
   return (
-    <View style={sectionStyles.section}>
-      <MonoLabel>{label}</MonoLabel>
-      <View style={sectionStyles.body}>{children}</View>
+    <View style={{ gap: 2 }}>
+      <Txt variant="label" tone="secondary">
+        {label}
+      </Txt>
+      <Txt variant="callout" tone="secondary">
+        {text}
+      </Txt>
     </View>
   );
 }
 
-const sectionStyles = StyleSheet.create({
-  section: { gap: 8 },
-  body: { gap: 6 },
-});
-
 const useStyles = makeStyles((c) => ({
-  wrap: { borderTopWidth: 1, borderBottomWidth: 1, borderColor: c.border, marginHorizontal: -16 },
-  toggle: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10 },
-  toggleText: { flex: 1 },
-  panel: { paddingHorizontal: 16, paddingBottom: 14, gap: 14 },
-  toolbar: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  segmented: { width: 220 },
-  copy: {
-    width: 34,
-    height: 34,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: c.border,
-  },
-  sections: { gap: 16 },
-  step: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
-  stepIndex: { width: 20, marginTop: 1 },
-  dot: { width: 4, height: 4, borderRadius: 2, marginTop: 8, marginHorizontal: 8 },
-  flex: { flex: 1 },
+  wrap: { marginBottom: 6 },
+  toggle: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingVertical: 4 },
+  panel: { borderLeftWidth: 2, borderColor: c.border, paddingLeft: 14, marginTop: 6, marginBottom: 8, gap: 12 },
+  sections: { gap: 10 },
+  links: { flexDirection: 'row', gap: 16 },
 }));

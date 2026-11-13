@@ -8,7 +8,7 @@ import { ProviderLogo } from '@/components/brand';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/feedback';
 import { Card, Divider, ScreenHeader, SectionHeader } from '@/components/ui/layout';
-import { Headline, MonoLabel, Txt } from '@/components/ui/text';
+import { Headline, Label, Txt } from '@/components/ui/text';
 import { api } from '@/lib/api';
 import { formatLatency, formatPercent, pad2 } from '@/lib/format';
 import { useAppStore } from '@/store';
@@ -38,7 +38,7 @@ function StatTile({ label, value, index }: { label: string; value: number; index
   const shown = useCountUp(value);
   return (
     <View style={[styles.tile, index % 2 === 1 && styles.tileRight, index > 1 && styles.tileBottom]}>
-      <MonoLabel>[ {pad2(index + 1)} ]</MonoLabel>
+      <Label>[ {pad2(index + 1)} ]</Label>
       <Txt variant="display">{shown}</Txt>
       <Txt variant="caption" tone="secondary">
         {label}
@@ -149,8 +149,8 @@ export default function InsightsScreen() {
                   ))}
                 </View>
                 <View style={styles.chartLabels}>
-                  <MonoLabel>{data.activity[0]?.date.slice(5).replace('-', '.')}</MonoLabel>
-                  <MonoLabel>Today</MonoLabel>
+                  <Label>{data.activity[0]?.date.slice(5).replace('-', '.')}</Label>
+                  <Label>Today</Label>
                 </View>
               </Card>
             </Animated.View>
@@ -200,7 +200,7 @@ export default function InsightsScreen() {
 function SeatStat({ label, value }: { label: string; value: string }) {
   return (
     <View style={{ flex: 1, gap: 4 }}>
-      <MonoLabel>{label}</MonoLabel>
+      <Label>{label}</Label>
       <Txt variant="calloutMedium">{value}</Txt>
     </View>
   );

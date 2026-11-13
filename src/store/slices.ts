@@ -21,6 +21,7 @@ const SIGNED_OUT = {
   chatError: null,
   draft: '',
   synthesizing: {},
+  seatSelection: {},
   drawerOpen: false,
 } satisfies Partial<SessionSlice & ThreadsSlice & ChatSlice & UISlice>;
 
@@ -142,6 +143,8 @@ let toastId = 0;
 export const createUISlice: SliceCreator<UISlice> = (set, get) => ({
   drawerOpen: false,
   setDrawerOpen: (drawerOpen) => set({ drawerOpen }),
+  sidebarCollapsed: false,
+  setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
   toasts: [],
   showToast: (text, tone = 'neutral') => {
     const id = ++toastId;

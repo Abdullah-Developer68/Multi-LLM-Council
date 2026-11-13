@@ -67,6 +67,9 @@ export interface ChatSlice {
   chatError: { message: string; prompt: string } | null;
   draft: string;
   synthesizing: Record<string, boolean>;
+  /** Which seat's answer is shown per turn (`live` while streaming); `picked` = chosen by the user. */
+  seatSelection: Record<string, { index: number; picked: boolean }>;
+  selectSeat: (key: string, index: number) => void;
   openThread: (id: string) => Promise<void>;
   newChat: () => void;
   setDraft: (text: string) => void;
@@ -86,6 +89,9 @@ export interface Toast {
 export interface UISlice {
   drawerOpen: boolean;
   setDrawerOpen: (open: boolean) => void;
+  /** Wide screens only: the persistent sidebar is hidden. */
+  sidebarCollapsed: boolean;
+  setSidebarCollapsed: (collapsed: boolean) => void;
   toasts: Toast[];
   showToast: (message: string, tone?: Toast['tone']) => void;
   dismissToast: (id: number) => void;

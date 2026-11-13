@@ -8,7 +8,7 @@ import { Wordmark } from '@/components/brand';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/controls';
 import { TextField } from '@/components/ui/text-field';
-import { Headline, MonoLabel, Txt } from '@/components/ui/text';
+import { Headline, Label, Txt } from '@/components/ui/text';
 import { haptic } from '@/lib/haptics';
 import { useAppStore } from '@/store';
 import { makeStyles, radius, useTheme } from '@/theme';
@@ -161,7 +161,7 @@ export default function SignInScreen() {
             <Animated.View entering={enter(3)} style={styles.pillars}>
               {PILLARS.map((p, i) => (
                 <View key={p.index} style={[styles.pillar, i > 0 && styles.pillarBorder]}>
-                  <MonoLabel>[ {p.index} ]</MonoLabel>
+                  <Label>[ {p.index} ]</Label>
                   <Txt variant="calloutMedium" style={styles.pillarTitle}>
                     {p.title}
                   </Txt>

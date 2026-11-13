@@ -1,10 +1,9 @@
 /**
  * Design tokens.
  *
- * Editorial, monochrome system: warm off-white canvas, white cards on
- * hairline borders, near-black pill actions, two-tone headlines (muted lead
- * line + strong line), mono micro-labels like `[ 01 ]`, and a single blue for
- * links. Dark mode mirrors the same hierarchy on a near-black canvas.
+ * A familiar chat-app system: a white (light) or charcoal (dark) canvas, a
+ * soft grey sidebar, grey bubbles for the user's messages and unboxed
+ * assistant answers, pill-shaped composer and buttons, and one blue for links.
  */
 
 export type ColorScheme = 'light' | 'dark';
@@ -12,9 +11,13 @@ export type ThemePreference = 'system' | ColorScheme;
 
 export interface Palette {
   bg: string;
+  sidebar: string;
   surface: string;
   surfaceMuted: string;
   surfaceSunken: string;
+  bubble: string;
+  composer: string;
+  hover: string;
   border: string;
   borderStrong: string;
   text: string;
@@ -34,68 +37,80 @@ export interface Palette {
   skeleton: string;
   skeletonHighlight: string;
   codeBg: string;
+  codeHeader: string;
   seats: Record<string, string>;
 }
 
+/** Neutral chat-app palette: white / charcoal canvas, grey user bubbles, soft sidebar. */
 export const palettes: Record<ColorScheme, Palette> = {
   light: {
-    bg: '#F7F7F5',
+    bg: '#FFFFFF',
+    sidebar: '#F9F9F9',
     surface: '#FFFFFF',
-    surfaceMuted: '#F1F1EE',
-    surfaceSunken: '#ECECE8',
-    border: '#E4E4E0',
-    borderStrong: '#D2D2CC',
-    text: '#141414',
-    textSecondary: '#6B6B67',
-    textTertiary: '#A2A29E',
-    primary: '#111111',
+    surfaceMuted: '#F4F4F4',
+    surfaceSunken: '#ECECEC',
+    bubble: '#F4F4F4',
+    composer: '#FFFFFF',
+    hover: '#ECECEC',
+    border: '#E5E5E5',
+    borderStrong: '#D4D4D4',
+    text: '#0D0D0D',
+    textSecondary: '#5D5D5D',
+    textTertiary: '#8F8F8F',
+    primary: '#0D0D0D',
     onPrimary: '#FFFFFF',
-    accent: '#2F6FEB',
-    accentSoft: '#E9F0FD',
-    success: '#1D8A4B',
-    successSoft: '#E6F4EB',
-    danger: '#D23F3F',
-    dangerSoft: '#FBEBEB',
-    warning: '#A86B12',
-    warningSoft: '#FBF2E2',
-    overlay: 'rgba(20, 20, 20, 0.28)',
-    skeleton: '#EDEDEA',
-    skeletonHighlight: '#F7F7F5',
-    codeBg: '#F4F4F1',
+    accent: '#2563EB',
+    accentSoft: '#EAF1FE',
+    success: '#16A34A',
+    successSoft: '#E8F6EC',
+    danger: '#DC2626',
+    dangerSoft: '#FDECEC',
+    warning: '#B45309',
+    warningSoft: '#FDF3E3',
+    overlay: 'rgba(0, 0, 0, 0.35)',
+    skeleton: '#EFEFEF',
+    skeletonHighlight: '#F7F7F7',
+    codeBg: '#F9F9F9',
+    codeHeader: '#F0F0F0',
     seats: {
-      'nemotron-lightning': '#3F94BE',
-      'north-mini-code': '#4F9573',
-      'nemotron-ultra': '#B07F33',
+      'nemotron-lightning': '#3B82C4',
+      'north-mini-code': '#2F9E6E',
+      'nemotron-ultra': '#C2841F',
     },
   },
   dark: {
-    bg: '#0A0A0A',
-    surface: '#121212',
-    surfaceMuted: '#191919',
-    surfaceSunken: '#0E0E0E',
-    border: '#232323',
-    borderStrong: '#323232',
-    text: '#EDEDEB',
-    textSecondary: '#A09F9B',
-    textTertiary: '#686865',
-    primary: '#F2F2F0',
-    onPrimary: '#0A0A0A',
-    accent: '#6E9DFF',
-    accentSoft: 'rgba(110, 157, 255, 0.13)',
-    success: '#45CF88',
-    successSoft: 'rgba(69, 207, 136, 0.12)',
-    danger: '#FF6B6B',
-    dangerSoft: 'rgba(255, 107, 107, 0.12)',
-    warning: '#EDB159',
-    warningSoft: 'rgba(237, 177, 89, 0.12)',
-    overlay: 'rgba(0, 0, 0, 0.62)',
-    skeleton: '#1A1A1A',
-    skeletonHighlight: '#242424',
-    codeBg: '#161616',
+    bg: '#212121',
+    sidebar: '#181818',
+    surface: '#2A2A2A',
+    surfaceMuted: '#303030',
+    surfaceSunken: '#1A1A1A',
+    bubble: '#303030',
+    composer: '#303030',
+    hover: '#2F2F2F',
+    border: '#383838',
+    borderStrong: '#4A4A4A',
+    text: '#ECECEC',
+    textSecondary: '#B4B4B4',
+    textTertiary: '#8B8B8B',
+    primary: '#ECECEC',
+    onPrimary: '#0D0D0D',
+    accent: '#7AA7FF',
+    accentSoft: 'rgba(122, 167, 255, 0.14)',
+    success: '#4ADE80',
+    successSoft: 'rgba(74, 222, 128, 0.12)',
+    danger: '#F87171',
+    dangerSoft: 'rgba(248, 113, 113, 0.13)',
+    warning: '#FBBF24',
+    warningSoft: 'rgba(251, 191, 36, 0.12)',
+    overlay: 'rgba(0, 0, 0, 0.55)',
+    skeleton: '#2E2E2E',
+    skeletonHighlight: '#363636',
+    codeBg: '#171717',
+    codeHeader: '#262626',
     seats: {
-      'nemotron-lightning': '#6FC0E6',
-      'north-mini-code': '#7CC6A0',
-      'nemotron-ultra': '#E2B263',
+      'nemotron-lightning': '#6CB4F0',
+      'north-mini-code': '#5CD39B',
+      'nemotron-ultra': '#F0B44C',
     },
   },
 };
@@ -110,15 +125,16 @@ export const fonts = {
 } as const;
 
 export const type = {
-  display: { fontFamily: fonts.regular, fontSize: 34, lineHeight: 38, letterSpacing: -1.2 },
-  title: { fontFamily: fonts.regular, fontSize: 26, lineHeight: 31, letterSpacing: -0.8 },
+  display: { fontFamily: fonts.medium, fontSize: 30, lineHeight: 36, letterSpacing: -0.9 },
+  title: { fontFamily: fonts.medium, fontSize: 24, lineHeight: 30, letterSpacing: -0.6 },
   headline: { fontFamily: fonts.medium, fontSize: 19, lineHeight: 25, letterSpacing: -0.35 },
+  message: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 27, letterSpacing: -0.1 },
   body: { fontFamily: fonts.regular, fontSize: 15, lineHeight: 23, letterSpacing: -0.1 },
   bodyMedium: { fontFamily: fonts.medium, fontSize: 15, lineHeight: 22, letterSpacing: -0.15 },
   callout: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, letterSpacing: -0.05 },
   calloutMedium: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 20, letterSpacing: -0.1 },
   caption: { fontFamily: fonts.regular, fontSize: 12.5, lineHeight: 17, letterSpacing: 0 },
-  label: { fontFamily: fonts.mono, fontSize: 11, lineHeight: 14, letterSpacing: 0.4 },
+  label: { fontFamily: fonts.medium, fontSize: 12.5, lineHeight: 17, letterSpacing: 0 },
   mono: { fontFamily: fonts.mono, fontSize: 12.5, lineHeight: 18, letterSpacing: 0 },
 } as const;
 

@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/ui/button';
-import { Headline, MonoLabel } from '@/components/ui/text';
+import { Headline, Label } from '@/components/ui/text';
 import { makeStyles } from '@/theme';
 
 export default function NotFound() {
@@ -11,7 +11,7 @@ export default function NotFound() {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.body}>
-        <MonoLabel>[ 404 ]</MonoLabel>
+        <Label>[ 404 ]</Label>
         <Headline muted="This page isn’t on the agenda." strong="Let’s get you back." />
         <Button label="Go home" onPress={() => router.replace('/')} />
       </View>

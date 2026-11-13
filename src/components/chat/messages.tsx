@@ -1,0 +1,442 @@
+import * as Clipboard from 'expo-clipboard';
+import { Check, ChevronLeft, ChevronRight, Copy, RefreshCw, Scale, Share2, ThumbsUp, TriangleAlert } from 'lucide-react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Pressable, Share, View } from 'react-native';
+import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  interpolateColor,
+  Keyframe,
+  useAnimatedStyle,
+  useDerivedValue,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
+
+import { ProviderLogo } from '@/components/brand';
+import { formatLatency } from '@/lib/format';
+import { haptic } from '@/lib/haptics';
+import { useAppStore } from '@/store';
+import type { LiveTurn } from '@/store/types';
+import { getSeat, SEATS, shortModelName } from '@/shared/council';
+import type { CouncilTurn } from '@/shared/types';
+import { makeStyles, radius, springs, useTheme } from '@/theme';
+import { Txt } from '../ui/text';
+import { DirectiveInspector } from './directive-inspector';
+import { MarkdownView } from './markdown';
+import { fromLive, fromResponse, type SeatView } from './seat-view';
+
+/* User message ------------------------------------------------------------- */
+
+export function UserMessage({ text }: { text: string }) {
+  const styles = useStyles();
+  return (
+    <Animated.View entering={FadeInDown.springify().damping(22)} style={styles.userRow}>
+      <View style={styles.userBubble}>
+        <Txt variant="message" selectable>
+          {text}
+        </Txt>
+      </View>
+    </Animated.View>
+  );
+}
+
+/* Thinking indicator ------------------------------------------------------- */
+
+export function ThinkingIndicator({ label }: { label: string }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const pulse = useSharedValue(1);
+  useEffect(() => {
+    pulse.set(withRepeat(withSequence(withTiming(0.55, { duration: 650 }), withTiming(1, { duration: 650 })), -1));
+  }, [pulse]);
+  const dot = useAnimatedStyle(() => ({ transform: [{ scale: pulse.get() }] }));
+  const text = useAnimatedStyle(() => ({ opacity: 0.45 + (pulse.get() - 0.55) * 1.1 }));
+  return (
+    <Animated.View entering={FadeIn.duration(200)} style={styles.thinking} accessibilityLabel={label}>
+      <Animated.View style={[styles.thinkingDot, { backgroundColor: colors.text }, dot]} />
+      <Animated.View style={text}>
+        <Txt variant="callout" tone="secondary">
+          {label}
+        </Txt>
+      </Animated.View>
+    </Animated.View>
+  );
+}
+
+/* Seat switcher ------------------------------------------------------------ */
+
+function StatusDot({ view }: { view: SeatView }) {
+  const { colors } = useTheme();
+  const live = view.phase !== 'done' && view.phase !== 'error';
+  const pulse = useSharedValue(1);
+  useEffect(() => {
+    pulse.set(live ? withRepeat(withSequence(withTiming(0.3, { duration: 550 }), withTiming(1, { duration: 550 })), -1) : withTiming(1));
+  }, [live, pulse]);
+  const style = useAnimatedStyle(() => ({ opacity: pulse.get() }));
+  const color = view.phase === 'error' ? colors.danger : (colors.seats[view.seatId] ?? colors.accent);
+  return <Animated.View style={[{ width: 7, height: 7, borderRadius: 4, backgroundColor: color }, style]} />;
+}
+
+function SeatChip({ view, active, onPress }: { view: SeatView; active: boolean; onPress: () => void }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const seat = getSeat(view.seatId);
+  const progress = useDerivedValue(() => withTiming(active ? 1 : 0, { duration: 180 }), [active]);
+  const chipStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(progress.get(), [0, 1], [colors.bg, colors.bubble]),
+    borderColor: interpolateColor(progress.get(), [0, 1], [colors.border, colors.bubble]),
+  }));
+  return (
+    <Pressable onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: active }} accessibilityLabel={seat?.name}>
+      <Animated.View style={[styles.chip, chipStyle]}>
+        <StatusDot view={view} />
+        <Txt variant="calloutMedium" tone={active ? 'primary' : 'secondary'} numberOfLines={1}>
+          {seat?.shortName ?? view.seatId}
+        </Txt>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+/* Assistant message -------------------------------------------------------- */
+
+const enterFrom = (dir: 1 | -1) =>
+  new Keyframe({
+    0: { opacity: 0, transform: [{ translateX: 18 * dir }] },
+    100: { opacity: 1, transform: [{ translateX: 0 }] },
+  }).duration(240);
+
+function ActionButton({ label, onPress, children }: { label: string; onPress: () => void; children: ReactNode }) {
+  const styles = useStyles();
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [styles.action, (pressed || hovered) && styles.actionActive]}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
+/**
+ * One assistant turn. Three seats answered, so the message shows one answer
+ * at a time with model chips above it — swipe, tap a chip, or use ‹ 1/3 ›.
+ */
+function AssistantMessage({
+  views,
+  selectionKey,
+  turn,
+}: {
+  views: SeatView[];
+  selectionKey: string;
+  turn?: CouncilTurn;
+}) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const selection = useAppStore((s) => s.seatSelection[selectionKey]);
+  const selectSeat = useAppStore((s) => s.selectSeat);
+  const vote = useAppStore((s) => s.vote);
+  const showToast = useAppStore((s) => s.showToast);
+  const [dir, setDir] = useState<1 | -1>(1);
+  const [copied, setCopied] = useState(false);
+
+  const ordered = [...views].sort(
+    (a, b) => SEATS.findIndex((s) => s.id === a.seatId) - SEATS.findIndex((s) => s.id === b.seatId),
+  );
+  const n = ordered.length;
+  // Until the user picks, follow the first seat that has something to show.
+  const autoIndex = Math.max(
+    0,
+    turn?.preferredAgentId
+      ? ordered.findIndex((v) => v.seatId === turn.preferredAgentId)
+      : ordered.findIndex((v) => v.text || v.phase === 'error'),
+  );
+  const index = Math.min(selection ? selection.index : autoIndex, n - 1);
+  const view = ordered[index];
+  const seat = getSeat(view.seatId);
+  const live = view.phase !== 'done' && view.phase !== 'error';
+  const preferred = turn?.preferredAgentId === view.seatId;
+
+  const go = (next: number) => {
+    const wrapped = (next + n) % n;
+    if (wrapped === index) return;
+    haptic.select();
+    setDir(next > index ? 1 : -1);
+    selectSeat(selectionKey, wrapped);
+  };
+
+  // Horizontal swipe on the answer switches seats.
+  const drag = useSharedValue(0);
+  const pan = usePanGesture({
+    activeOffsetX: [-18, 18],
+    failOffsetY: [-12, 12],
+    onUpdate: (e) => {
+      'worklet';
+      drag.set(e.translationX * 0.35);
+    },
+    onDeactivate: (e) => {
+      'worklet';
+      if (Math.abs(e.translationX) > 70 || Math.abs(e.velocityX) > 650) {
+        scheduleOnRN(go, index + (e.translationX < 0 ? 1 : -1));
+      }
+      drag.set(withSpring(0, springs.snappy));
+    },
+  });
+  const dragStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: drag.get() }],
+    opacity: 1 - Math.min(Math.abs(drag.get()) / 160, 0.4),
+  }));
+
+  const copy = async () => {
+    await Clipboard.setStringAsync(view.text);
+    haptic.success();
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const waitingLabel =
+    view.phase === 'thinking'
+      ? `${seat?.shortName ?? 'Model'} is thinking`
+      : view.rotations
+        ? `Switching ${seat?.shortName ?? 'model'} to a backup model`
+        : `Waiting for ${seat?.shortName ?? 'the model'}`;
+
+  return (
+    <View style={styles.assistant}>
+      <View style={styles.chips} accessibilityRole="tablist">
+        {ordered.map((v, i) => (
+          <SeatChip
+            key={v.seatId}
+            view={v}
+            active={i === index}
+            onPress={() => {
+              if (i !== index) go(i);
+            }}
+          />
+        ))}
+      </View>
+
+      <GestureDetector gesture={pan}>
+        <Animated.View style={dragStyle}>
+          <Animated.View key={view.seatId} entering={enterFrom(dir)}>
+            {view.byName && view.directive ? <DirectiveInspector byName={view.byName} directive={view.directive} /> : null}
+            {view.phase === 'error' ? (
+              <View style={[styles.error, { backgroundColor: colors.dangerSoft }]}>
+                <TriangleAlert size={16} color={colors.danger} strokeWidth={1.8} />
+                <Txt variant="callout" tone="danger" style={styles.flex}>
+                  {view.error || `${seat?.name ?? 'This model'} could not answer.`}
+                </Txt>
+              </View>
+            ) : view.text ? (
+              <MarkdownView>{live ? `${view.text} ●` : view.text}</MarkdownView>
+            ) : (
+              <ThinkingIndicator label={waitingLabel} />
+            )}
+          </Animated.View>
+        </Animated.View>
+      </GestureDetector>
+
+      {!live ? (
+        <Animated.View entering={FadeIn.duration(220)} style={styles.actions}>
+          {view.phase === 'done' ? (
+            <>
+              <ActionButton label="Copy" onPress={copy}>
+                {copied ? (
+                  <Check size={16} color={colors.success} strokeWidth={2} />
+                ) : (
+                  <Copy size={16} color={colors.textSecondary} strokeWidth={1.8} />
+                )}
+              </ActionButton>
+              {turn ? (
+                <ActionButton label={preferred ? 'Remove preference' : 'Prefer this answer'} onPress={() => vote(turn.turnId, view.seatId)}>
+                  <ThumbsUp
+                    size={16}
+                    color={preferred ? colors.text : colors.textSecondary}
+                    fill={preferred ? colors.text : 'transparent'}
+                    strokeWidth={1.8}
+                  />
+                </ActionButton>
+              ) : null}
+              <ActionButton
+                label="Share"
+                onPress={() => Share.share({ message: view.text }).catch(() => showToast('Sharing is not available here.'))}
+              >
+                <Share2 size={16} color={colors.textSecondary} strokeWidth={1.8} />
+              </ActionButton>
+            </>
+          ) : null}
+
+          <View style={styles.pager}>
+            <ActionButton label="Previous model" onPress={() => go(index - 1)}>
+              <ChevronLeft size={16} color={colors.textSecondary} strokeWidth={2} />
+            </ActionButton>
+            <Txt variant="caption" tone="secondary">
+              {index + 1}/{n}
+            </Txt>
+            <ActionButton label="Next model" onPress={() => go(index + 1)}>
+              <ChevronRight size={16} color={colors.textSecondary} strokeWidth={2} />
+            </ActionButton>
+          </View>
+
+          <View style={styles.meta}>
+            <ProviderLogo model={view.model} provider={view.rotations ? undefined : seat?.providerKey} size={18} />
+            <Txt variant="caption" tone="tertiary" numberOfLines={1} style={styles.flexShrink}>
+              {shortModelName(view.model)}
+              {view.latencyMs ? ` · ${formatLatency(view.latencyMs)}` : ''}
+              {view.rotated ? ' · backup' : ''}
+              {view.tier === 'keyless' ? ' · keyless' : ''}
+            </Txt>
+          </View>
+        </Animated.View>
+      ) : null}
+    </View>
+  );
+}
+
+/* Consensus ---------------------------------------------------------------- */
+
+function Consensus({ turn }: { turn: CouncilTurn }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const synthesize = useAppStore((s) => s.synthesize);
+  const busy = useAppStore((s) => !!s.synthesizing[turn.turnId]);
+  const showToast = useAppStore((s) => s.showToast);
+  const answered = turn.agentResponses.filter((r) => r.status === 'ok').length;
+  if (answered < 2) return null;
+
+  if (busy) return <ThinkingIndicator label="Building a consensus from all answers" />;
+
+  if (!turn.synthesis) {
+    return (
+      <Pressable
+        onPress={() => {
+          haptic.tap();
+          synthesize(turn.turnId);
+        }}
+        style={({ pressed }) => [styles.consensusButton, pressed && styles.actionActive]}
+        accessibilityRole="button"
+      >
+        <Scale size={15} color={colors.text} strokeWidth={1.8} />
+        <Txt variant="calloutMedium">Build consensus</Txt>
+        <Txt variant="caption" tone="tertiary">
+          merge all {answered} answers
+        </Txt>
+      </Pressable>
+    );
+  }
+
+  const synthesis = turn.synthesis;
+  return (
+    <Animated.View entering={FadeInDown.springify().damping(22)} style={styles.consensus}>
+      <View style={styles.consensusHeader}>
+        <Scale size={15} color={colors.text} strokeWidth={1.8} />
+        <Txt variant="calloutMedium" style={styles.flex}>
+          Council consensus
+        </Txt>
+      </View>
+      <MarkdownView>{synthesis.text}</MarkdownView>
+      <View style={styles.actions}>
+        <ActionButton
+          label="Copy consensus"
+          onPress={async () => {
+            await Clipboard.setStringAsync(synthesis.text);
+            haptic.success();
+            showToast('Consensus copied');
+          }}
+        >
+          <Copy size={16} color={colors.textSecondary} strokeWidth={1.8} />
+        </ActionButton>
+        <ActionButton label="Rebuild consensus" onPress={() => synthesize(turn.turnId)}>
+          <RefreshCw size={16} color={colors.textSecondary} strokeWidth={1.8} />
+        </ActionButton>
+        <Txt variant="caption" tone="tertiary" style={styles.consensusMeta}>
+          {shortModelName(synthesis.model)} · {formatLatency(synthesis.latencyMs)}
+        </Txt>
+      </View>
+    </Animated.View>
+  );
+}
+
+/* Turns -------------------------------------------------------------------- */
+
+export function TurnView({ turn }: { turn: CouncilTurn }) {
+  const styles = useStyles();
+  return (
+    <View style={styles.turn}>
+      <UserMessage text={turn.userPrompt} />
+      <AssistantMessage views={turn.agentResponses.map(fromResponse)} selectionKey={turn.turnId} turn={turn} />
+      <Consensus turn={turn} />
+    </View>
+  );
+}
+
+export function LiveTurnView({ live }: { live: LiveTurn }) {
+  const styles = useStyles();
+  return (
+    <View style={styles.turn}>
+      <UserMessage text={live.prompt} />
+      <AssistantMessage views={Object.values(live.seats).map(fromLive)} selectionKey="live" />
+    </View>
+  );
+}
+
+const useStyles = makeStyles((c) => ({
+  turn: { gap: 18, marginBottom: 36 },
+  userRow: { alignItems: 'flex-end' },
+  userBubble: {
+    maxWidth: '82%',
+    backgroundColor: c.bubble,
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
+  assistant: { gap: 10 },
+  chips: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    height: 32,
+    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
+  thinking: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
+  thinkingDot: { width: 11, height: 11, borderRadius: 6 },
+  error: { flexDirection: 'row', gap: 10, padding: 12, borderRadius: radius.md },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 2, marginLeft: -6 },
+  action: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  actionActive: { backgroundColor: c.hover },
+  pager: { flexDirection: 'row', alignItems: 'center', marginLeft: 4 },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 8, flexShrink: 1 },
+  consensusButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'flex-start',
+    height: 38,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  consensus: {
+    borderLeftWidth: 2,
+    borderColor: c.borderStrong,
+    paddingLeft: 14,
+    gap: 6,
+  },
+  consensusHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
+  consensusMeta: { marginLeft: 6 },
+  flex: { flex: 1 },
+  flexShrink: { flexShrink: 1 },
+}));

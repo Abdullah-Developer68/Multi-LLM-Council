@@ -8,7 +8,7 @@ import { ProviderLogo } from '@/components/brand';
 import { Button, IconButton } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/feedback';
 import { Card, Divider, ScreenHeader, SectionHeader } from '@/components/ui/layout';
-import { Headline, MonoLabel, Txt } from '@/components/ui/text';
+import { Headline, Label, Txt } from '@/components/ui/text';
 import { api } from '@/lib/api';
 import { formatLatency, pad2, relativeTime } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
@@ -28,7 +28,7 @@ function QuotaCard({ status }: { status: CouncilStatus }) {
 
   return (
     <Card style={styles.gap}>
-      <MonoLabel>Free requests left today</MonoLabel>
+      <Label>Free requests left today</Label>
       <View style={styles.quotaRow}>
         <Txt variant="display">{remaining ?? '—'}</Txt>
         {limit ? (
@@ -126,7 +126,7 @@ function Stat({ label, value, mono }: { label: string; value: string; mono?: boo
   const styles = useStyles();
   return (
     <View style={styles.stat}>
-      <MonoLabel>{label}</MonoLabel>
+      <Label>{label}</Label>
       <Txt variant={mono ? 'mono' : 'calloutMedium'} numberOfLines={1}>
         {value}
       </Txt>
@@ -198,7 +198,7 @@ export default function CouncilScreen() {
         ) : (
           <>
             <Animated.View entering={FadeInDown.delay(40).springify().damping(20)}>
-              <SectionHeader index="01" title="Quota" trailing={<MonoLabel>{relativeTime(status.checkedAt)}</MonoLabel>} />
+              <SectionHeader index="01" title="Quota" trailing={<Label>{relativeTime(status.checkedAt)}</Label>} />
               <QuotaCard status={status} />
             </Animated.View>
 
@@ -206,7 +206,7 @@ export default function CouncilScreen() {
               <SectionHeader
                 index="02"
                 title="Seats"
-                trailing={status.catalogSize ? <MonoLabel>{status.catalogSize} models in catalog</MonoLabel> : null}
+                trailing={status.catalogSize ? <Label>{status.catalogSize} models in catalog</Label> : null}
               />
               <View style={styles.gap}>
                 {status.seats.map((seat, i) => (
