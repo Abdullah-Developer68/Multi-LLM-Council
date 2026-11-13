@@ -197,7 +197,7 @@ export default function ChatScreen() {
   return (
     <View style={styles.root}>
       {wide && !collapsed ? (
-        <Animated.View entering={FadeIn.duration(180)}>
+        <Animated.View entering={FadeIn.duration(180)} style={styles.dock}>
           <DockedSidebar />
         </Animated.View>
       ) : null}
@@ -226,6 +226,7 @@ export default function ChatScreen() {
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, flexDirection: 'row', backgroundColor: c.bg },
   main: { flex: 1, backgroundColor: c.bg },
+  dock: { alignSelf: 'stretch' },
   flex: { flex: 1 },
   safeTop: { backgroundColor: c.bg },
   header: { height: 56, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, gap: 2 },

@@ -7,7 +7,6 @@ import Animated, {
   FadeIn,
   FadeInDown,
   interpolateColor,
-  Keyframe,
   useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
@@ -106,12 +105,6 @@ function SeatChip({ view, active, onPress }: { view: SeatView; active: boolean; 
 
 /* Assistant message -------------------------------------------------------- */
 
-const enterFrom = (dir: 1 | -1) =>
-  new Keyframe({
-    0: { opacity: 0, transform: [{ translateX: 18 * dir }] },
-    100: { opacity: 1, transform: [{ translateX: 0 }] },
-  }).duration(240);
-
 function ActionButton({ label, onPress, children }: { label: string; onPress: () => void; children: ReactNode }) {
   const styles = useStyles();
   return (
@@ -146,7 +139,6 @@ function AssistantMessage({
   const selectSeat = useAppStore((s) => s.selectSeat);
   const vote = useAppStore((s) => s.vote);
   const showToast = useAppStore((s) => s.showToast);
-  const [dir, setDir] = useState<1 | -1>(1);
   const [copied, setCopied] = useState(false);
 
   const ordered = [...views].sort(
@@ -166,16 +158,24 @@ function AssistantMessage({
   const live = view.phase !== 'done' && view.phase !== 'error';
   const preferred = turn?.preferredAgentId === view.seatId;
 
+  // Switching seats slides the new answer in from the side it came from.
+  // (A shared-value animation, not a layout `entering` animation: on web those
+  // leave the element absolutely positioned and collapse its parent.)
+  const swap = useSharedValue(1);
+  const swapDir = useSharedValue(1);
+  const drag = useSharedValue(0);
+
   const go = (next: number) => {
     const wrapped = (next + n) % n;
     if (wrapped === index) return;
     haptic.select();
-    setDir(next > index ? 1 : -1);
+    swapDir.set(next > index ? 1 : -1);
+    swap.set(0);
+    swap.set(withTiming(1, { duration: 240 }));
     selectSeat(selectionKey, wrapped);
   };
 
   // Horizontal swipe on the answer switches seats.
-  const drag = useSharedValue(0);
   const pan = usePanGesture({
     activeOffsetX: [-18, 18],
     failOffsetY: [-12, 12],
@@ -192,8 +192,8 @@ function AssistantMessage({
     },
   });
   const dragStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: drag.get() }],
-    opacity: 1 - Math.min(Math.abs(drag.get()) / 160, 0.4),
+    transform: [{ translateX: drag.get() + (1 - swap.get()) * 18 * swapDir.get() }],
+    opacity: swap.get() * (1 - Math.min(Math.abs(drag.get()) / 160, 0.4)),
   }));
 
   const copy = async () => {
@@ -227,7 +227,7 @@ function AssistantMessage({
 
       <GestureDetector gesture={pan}>
         <Animated.View style={dragStyle}>
-          <Animated.View key={view.seatId} entering={enterFrom(dir)}>
+          <View>
             {view.byName && view.directive ? <DirectiveInspector byName={view.byName} directive={view.directive} /> : null}
             {view.phase === 'error' ? (
               <View style={[styles.error, { backgroundColor: colors.dangerSoft }]}>
@@ -241,7 +241,7 @@ function AssistantMessage({
             ) : (
               <ThinkingIndicator label={waitingLabel} />
             )}
-          </Animated.View>
+          </View>
         </Animated.View>
       </GestureDetector>
 

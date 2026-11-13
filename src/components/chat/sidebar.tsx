@@ -320,7 +320,7 @@ const useStyles = makeStyles((c) => ({
   empty: { paddingHorizontal: 10, paddingTop: 24 },
   user: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 8, borderRadius: radius.md, marginTop: 4 },
   avatar: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  docked: { width: SIDEBAR_WIDTH, backgroundColor: c.sidebar, borderRightWidth: StyleSheet.hairlineWidth, borderColor: c.border },
+  docked: { flex: 1, width: SIDEBAR_WIDTH, backgroundColor: c.sidebar, borderRightWidth: StyleSheet.hairlineWidth, borderColor: c.border },
   drawer: { position: 'absolute', top: 0, bottom: 0, left: 0, backgroundColor: c.sidebar },
   flex: { flex: 1 },
 }));
