@@ -6,19 +6,22 @@ Ask once, three models answer. A universal Expo app (iOS, Android, web) in which
 
 ## Features
 
-- **Peer-ring briefs.** Seat 1 writes the brief for seat 2, seat 2 for seat 3, and seat 3 for seat 1. Briefs are built deterministically, so no quota is spent before the answers start.
-- **Live token streaming.** `POST /api/council` streams NDJSON events. All three seats type into their cards at once, and the screen shows thinking, writing, and failover states.
-- **Failover on three axes:** to the next free model, then to the next OpenRouter key, then to the keyless tier. A reasoning-only reply (scratch work with no answer) counts as a failure and triggers failover.
-- **Swipeable card deck.** Cards are physically stacked. The top card follows your finger and tilts. Seat tabs show live status, and a sliding underline marks the selected seat.
-- **Consensus.** One tap asks the chair to produce: Verdict, Where the council agrees, Where it differs, Final answer.
-- **Preferences.** Mark the best answer on each turn. These votes feed the seat leaderboard.
-- **Conversation memory.** Follow-ups send a summary of the last 3 turns. You can switch this per message or in Settings.
-- **History drawer.** Opens with an edge swipe or the menu button. It groups threads by Pinned / Today / This week / Earlier, searches titles and prompts on the server, and supports rename, pin, and delete.
-- **Council status.** Shows the verified model per seat, its fallback pool, cooling-down models, and the remaining free quota across keys. It can re-verify the catalog (free) or measure latency (uses up to 3 requests).
-- **Insights.** Totals, 14-day activity, and a per-seat leaderboard (preferences, answer rate, average latency, failover rate, keyless rate).
-- **Light and dark mode.** System, Light, or Dark, saved on the device.
-- **Accounts.** Sessions persist for 30 days. You can rename yourself or sign out of all devices. Threads are scoped to their owner.
-- Copy and share answers, copy code blocks, haptics on native, and Enter to send on web.
+- **Familiar chat layout.** The page works like ChatGPT:
+  - Your messages appear in grey bubbles and answers appear unboxed, with copy, prefer, and share actions underneath.
+  - The rounded composer has an "Ask anything" prompt and a stop button.
+  - On a new chat, a centered greeting shows suggestion chips.
+- **Sidebar.** It stays docked on wide screens and can be collapsed. On phones it slides out as a drawer, and you can open it with an edge swipe. It has New chat, Search chats, chats grouped by Today / Yesterday / Previous 7 days, and rename, pin, and delete.
+- **Three answers per message.** Switch between the models using the chips above the answer, the ‹ 1/3 › pager, or a sideways swipe. Answers stream in live and show a pulsing "thinking" indicator.
+- **Peer-ring briefs.** Each model answers from a brief written by the previous model in the ring (1 → 2 → 3 → 1). The "Brief from …" disclosure shows that brief.
+- **Consensus.** "Build consensus" merges all answers into one inline message with these sections: Verdict, Where the council agrees, Where it differs, Final answer.
+- **Failover.** If a model fails, the app moves to the next free model, then to the next OpenRouter key, then to the keyless tier. A reply that contains only reasoning and no answer counts as a failure.
+- **Other features:**
+  - Conversation memory.
+  - Council status: the model behind each seat and today's remaining quota.
+  - Insights.
+  - Light, Dark, or System theme.
+  - Sessions that persist for 30 days.
+  - Chats that are private to each account.
 
 ## Setup
 

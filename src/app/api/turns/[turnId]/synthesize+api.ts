@@ -17,6 +17,7 @@ export const POST = route(async (request, params) => {
     synthesis = await synthesize(toCouncilTurn(row), request.signal);
   } catch (err) {
     if (err instanceof HttpError) throw err;
+    console.warn('[synthesis] failed:', (err as Error).message);
     throw new HttpError(502, (err as Error).message || 'The council chair could not answer right now.');
   }
 

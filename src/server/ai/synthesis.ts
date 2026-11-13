@@ -2,7 +2,11 @@ import type { CouncilTurn, TurnSynthesis } from '../../shared/types';
 import { HttpError } from '../http';
 import { runSeat } from './rotation';
 
-const CHAIR_SEAT = 'nemotron-ultra';
+/**
+ * The chair uses North's pool: its primary is a non-reasoning model, so it
+ * spends its budget on the merged answer instead of on long hidden reasoning.
+ */
+const CHAIR_SEAT = 'north-mini-code';
 
 /**
  * Asks the council chair to reconcile the seats' answers into one verdict.
@@ -22,7 +26,7 @@ export async function synthesize(turn: CouncilTurn, signal?: AbortSignal): Promi
     seatId: CHAIR_SEAT,
     seatName: 'Council chair',
     signal,
-    maxTokens: 1600,
+    maxTokens: 3000,
     temperature: 0.2,
     messages: [
       {
