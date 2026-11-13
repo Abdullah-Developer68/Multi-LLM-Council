@@ -19,9 +19,9 @@ function CodeBlock({ code, lang }: { code: string; lang: string }) {
   };
   return (
     <View style={[styles.code, { backgroundColor: colors.codeBg, borderColor: colors.border }]}>
-      <View style={[styles.codeHeader, { borderBottomColor: colors.border }]}>
-        <Txt variant="label" tone="tertiary">
-          {(lang || 'code').toUpperCase()}
+      <View style={[styles.codeHeader, { backgroundColor: colors.codeHeader, borderBottomColor: colors.border }]}>
+        <Txt variant="label" tone="secondary">
+          {lang || 'code'}
         </Txt>
         <Pressable onPress={copy} hitSlop={8} style={styles.codeCopy} accessibilityLabel="Copy code">
           {copied ? (
@@ -29,8 +29,8 @@ function CodeBlock({ code, lang }: { code: string; lang: string }) {
           ) : (
             <Copy size={13} color={colors.textTertiary} strokeWidth={1.8} />
           )}
-          <Txt variant="label" tone={copied ? 'success' : 'tertiary'}>
-            {copied ? 'COPIED' : 'COPY'}
+          <Txt variant="label" tone={copied ? 'success' : 'secondary'}>
+            {copied ? 'Copied' : 'Copy code'}
           </Txt>
         </Pressable>
       </View>
@@ -77,7 +77,7 @@ export function MarkdownView({ children }: { children: string }) {
 const MONO = Platform.select({ web: fonts.mono, default: fonts.mono });
 
 const styles = StyleSheet.create({
-  code: { borderWidth: 1, borderRadius: radius.sm, marginVertical: 10, overflow: 'hidden' },
+  code: { borderWidth: 1, borderRadius: radius.md, marginVertical: 10, overflow: 'hidden' },
   codeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -92,8 +92,8 @@ const styles = StyleSheet.create({
 });
 
 const useMarkdownStyles = makeStyles((c) => ({
-  body: { color: c.text, fontFamily: fonts.regular, fontSize: 15, lineHeight: 23 },
-  paragraph: { marginTop: 0, marginBottom: 10 },
+  body: { color: c.text, fontFamily: fonts.regular, fontSize: 16, lineHeight: 27 },
+  paragraph: { marginTop: 0, marginBottom: 12 },
   heading1: { fontFamily: fonts.medium, fontSize: 21, lineHeight: 27, letterSpacing: -0.4, marginTop: 8, marginBottom: 8 },
   heading2: { fontFamily: fonts.medium, fontSize: 18, lineHeight: 24, letterSpacing: -0.3, marginTop: 8, marginBottom: 6 },
   heading3: { fontFamily: fonts.medium, fontSize: 16, lineHeight: 22, marginTop: 6, marginBottom: 4 },

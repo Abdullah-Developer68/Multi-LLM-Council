@@ -6,14 +6,14 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { radius, useTheme } from '@/theme';
 import { IconButton } from './button';
 import { PressableScale } from './pressable-scale';
-import { Label, Txt } from './text';
+import { Txt } from './text';
 
 export function Card({ children, style, padded = true }: { children: ReactNode; style?: StyleProp<ViewStyle>; padded?: boolean }) {
   const { colors } = useTheme();
   return (
     <View
       style={[
-        { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: radius.md },
+        { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: radius.lg },
         padded && { padding: 16 },
         style,
       ]}
@@ -28,14 +28,13 @@ export function Divider({ inset = 0, style }: { inset?: number; style?: StylePro
   return <View style={[{ height: 1, backgroundColor: colors.border, marginLeft: inset }, style]} />;
 }
 
-/** Section header: mono index + label, e.g. `[ 02 ]  APPEARANCE`. */
-export function SectionHeader({ index, title, trailing }: { index?: string; title: string; trailing?: ReactNode }) {
+/** Section header: a small secondary title with an optional trailing element. */
+export function SectionHeader({ title, trailing }: { title: string; trailing?: ReactNode }) {
   return (
     <View style={styles.sectionHeader}>
-      <View style={styles.sectionLeft}>
-        {index ? <Label>[ {index} ]</Label> : null}
-        <Label tone="secondary">{title}</Label>
-      </View>
+      <Txt variant="calloutMedium" tone="secondary">
+        {title}
+      </Txt>
       {trailing}
     </View>
   );
@@ -120,8 +119,7 @@ export function ScreenHeader({ title, trailing }: { title: string; trailing?: Re
 }
 
 const styles = StyleSheet.create({
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  sectionLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingHorizontal: 4 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

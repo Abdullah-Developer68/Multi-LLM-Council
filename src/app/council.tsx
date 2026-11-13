@@ -198,14 +198,12 @@ export default function CouncilScreen() {
         ) : (
           <>
             <Animated.View entering={FadeInDown.delay(40).springify().damping(20)}>
-              <SectionHeader index="01" title="Quota" trailing={<Label>{relativeTime(status.checkedAt)}</Label>} />
+              <SectionHeader title="Quota" trailing={<Label>{relativeTime(status.checkedAt)}</Label>} />
               <QuotaCard status={status} />
             </Animated.View>
 
             <View>
-              <SectionHeader
-                index="02"
-                title="Seats"
+              <SectionHeader title="Seats"
                 trailing={status.catalogSize ? <Label>{status.catalogSize} models in catalog</Label> : null}
               />
               <View style={styles.gap}>
@@ -216,7 +214,7 @@ export default function CouncilScreen() {
             </View>
 
             <View>
-              <SectionHeader index="03" title="Diagnostics" />
+              <SectionHeader title="Diagnostics" />
               <Card style={styles.gap}>
                 <Button label="Re-verify catalog" variant="secondary" icon={RefreshCw} fullWidth loading={busy === 'verify'} disabled={!!busy} onPress={() => load('verify')} />
                 <Txt variant="caption" tone="tertiary">

@@ -38,7 +38,6 @@ function StatTile({ label, value, index }: { label: string; value: number; index
   const shown = useCountUp(value);
   return (
     <View style={[styles.tile, index % 2 === 1 && styles.tileRight, index > 1 && styles.tileBottom]}>
-      <Label>[ {pad2(index + 1)} ]</Label>
       <Txt variant="display">{shown}</Txt>
       <Txt variant="caption" tone="secondary">
         {label}
@@ -131,7 +130,7 @@ export default function InsightsScreen() {
         ) : (
           <>
             <Animated.View entering={FadeInDown.delay(60).springify().damping(20)}>
-              <SectionHeader index="01" title="Totals" />
+              <SectionHeader title="Totals" />
               <View style={styles.grid}>
                 <StatTile index={0} label="Conversations" value={data.totals.threads} />
                 <StatTile index={1} label="Council turns" value={data.totals.turns} />
@@ -141,7 +140,7 @@ export default function InsightsScreen() {
             </Animated.View>
 
             <Animated.View entering={FadeInDown.delay(120).springify().damping(20)}>
-              <SectionHeader index="02" title="Last 14 days" />
+              <SectionHeader title="Last 14 days" />
               <Card>
                 <View style={styles.chart}>
                   {data.activity.map((a, i) => (
@@ -156,7 +155,7 @@ export default function InsightsScreen() {
             </Animated.View>
 
             <Animated.View entering={FadeInDown.delay(180).springify().damping(20)}>
-              <SectionHeader index="03" title="Seat leaderboard" />
+              <SectionHeader title="Seat leaderboard" />
               <Card padded={false}>
                 {seats.map((seat, i) => {
                   const def = getSeat(seat.seatId);

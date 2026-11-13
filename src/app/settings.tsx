@@ -100,7 +100,7 @@ export default function SettingsScreen() {
         </Animated.View>
 
         <Animated.View entering={enter(1)}>
-          <SectionHeader index="01" title="Profile" />
+          <SectionHeader title="Profile" />
           <Card style={styles.gap}>
             <TextField label="Display name" value={name} onChangeText={setName} maxLength={80} returnKeyType="done" onSubmitEditing={saveName} />
             {dirty ? (
@@ -112,7 +112,7 @@ export default function SettingsScreen() {
         </Animated.View>
 
         <Animated.View entering={enter(2)}>
-          <SectionHeader index="02" title="Appearance" />
+          <SectionHeader title="Appearance" />
           <Card style={styles.gap}>
             <Segmented<ThemePreference>
               value={themePreference}
@@ -130,7 +130,7 @@ export default function SettingsScreen() {
         </Animated.View>
 
         <Animated.View entering={enter(3)}>
-          <SectionHeader index="03" title="Council" />
+          <SectionHeader title="Council" />
           <Card padded={false}>
             <ToggleRow
               title="Conversation memory"
@@ -153,7 +153,7 @@ export default function SettingsScreen() {
         </Animated.View>
 
         <Animated.View entering={enter(4)}>
-          <SectionHeader index="04" title="Account" />
+          <SectionHeader title="Account" />
           <Card style={styles.gap}>
             <Button label="Sign out" variant="secondary" icon={LogOut} fullWidth onPress={() => signOut()} />
             {confirmEverywhere ? (

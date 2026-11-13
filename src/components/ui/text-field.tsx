@@ -23,7 +23,7 @@ export function TextField({ label, error, icon: Icon, secure = false, onFocus, o
   const frameStyle = useAnimatedStyle(() => ({
     borderColor: error
       ? colors.danger
-      : interpolateColor(focus.get(), [0, 1], [colors.border, colors.text]),
+      : interpolateColor(focus.get(), [0, 1], [colors.borderStrong, colors.accent]),
   }));
 
   return (
@@ -79,17 +79,17 @@ export function TextField({ label, error, icon: Icon, secure = false, onFocus, o
 
 const styles = StyleSheet.create({
   wrap: { gap: 6 },
-  label: { marginLeft: 2 },
+  label: { marginLeft: 14 },
   frame: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     borderWidth: 1,
-    borderRadius: radius.md,
-    paddingHorizontal: 14,
-    minHeight: 48,
+    borderRadius: radius.pill,
+    paddingHorizontal: 18,
+    minHeight: 52,
   },
   input: { flex: 1, fontFamily: fonts.regular, fontSize: 15, paddingVertical: 12 },
   webInput: { outlineStyle: 'none' } as object,
-  error: { marginLeft: 2 },
+  error: { marginLeft: 14 },
 });
