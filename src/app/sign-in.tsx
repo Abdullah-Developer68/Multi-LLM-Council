@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View, type TextInputInstance } from 'react-native';
-import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { LogoTile } from '@/components/brand';
@@ -12,6 +12,9 @@ import { Txt } from '@/components/ui/text';
 import { haptic } from '@/lib/haptics';
 import { useAppStore } from '@/store';
 import { fonts, makeStyles } from '@/theme';
+
+/** Plain timed motion only on the auth screen: no springs, so nothing bounces. */
+const layoutMotion = LinearTransition.duration(180);
 
 type Mode = 'signin' | 'signup';
 
@@ -58,7 +61,7 @@ export default function SignInScreen() {
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <Animated.View entering={FadeInDown.springify().damping(20)} style={styles.column} layout={LinearTransition.springify().damping(20)}>
+          <Animated.View entering={FadeIn.duration(220)} style={styles.column} layout={layoutMotion}>
             <View style={styles.brand}>
               <LogoTile size={40} />
               <Txt style={styles.brandName}>Council</Txt>
@@ -90,7 +93,7 @@ export default function SignInScreen() {
                 </Animated.View>
               ) : null}
 
-              <Animated.View layout={LinearTransition.springify().damping(20)} style={styles.fields}>
+              <Animated.View layout={layoutMotion} style={styles.fields}>
                 <TextField
                   ref={emailRef}
                   label="Email"
