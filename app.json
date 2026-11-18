@@ -40,6 +40,20 @@
             "backgroundColor": "#0A0A0A"
           }
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Council uses your camera so you can photograph notes, documents or screens and attach them to a question.",
+          "photosPermission": "Council opens your photo library so you can attach pictures to a question.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
       ]
     ],
     "experiments": {

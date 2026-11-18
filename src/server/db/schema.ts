@@ -10,7 +10,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 
-import type { SeatResponse, TurnSynthesis } from '../../shared/types';
+import type { AttachmentMeta, SeatResponse, TurnSynthesis } from '../../shared/types';
 
 /** Legacy directory table kept from v1 (exposed at /api/users). */
 export const users = pgTable('users', {
@@ -56,6 +56,8 @@ export interface TurnMeta {
   preferredAgentId?: string | null;
   synthesis?: TurnSynthesis | null;
   contextTurns?: number;
+  /** Files attached to the user's message. */
+  attachments?: AttachmentMeta[];
 }
 
 export const multiAgentTurns = pgTable(

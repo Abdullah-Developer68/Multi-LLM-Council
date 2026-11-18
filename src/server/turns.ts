@@ -34,6 +34,7 @@ export function toCouncilTurn(row: TurnRow): CouncilTurn {
     agentResponses: responses,
     preferredAgentId: meta.preferredAgentId ?? null,
     refinement: parseRefinement(row),
+    attachments: Array.isArray(meta.attachments) ? meta.attachments : [],
     synthesis: meta.synthesis ?? null,
     elapsedMs: meta.elapsedMs ?? null,
     contextTurns: meta.contextTurns ?? 0,
