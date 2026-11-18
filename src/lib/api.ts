@@ -124,77 +124,119 @@ export interface UploadFileInput {
   webFile?: File;
 }
 
+type UploadResponse = { status: number; body: string };
+
 /**
- * Uploads one file or photo to `POST /api/attachments` using global `fetch`
- * (so React Native / browsers generate the multipart boundary) with a generous
- * timeout to allow server-side vision extraction on images.
+ * Native upload via React Native's XMLHttpRequest.
+ *
+ * Expo SDK 58 replaces the global `fetch` with `expo/fetch`, whose FormData
+ * encoder does not support React Native file parts (`{ uri, name, type }`).
+ * The request then fails before it leaves the device. React Native's XHR
+ * still understands those parts: it streams the file from disk and keeps the
+ * original filename and MIME type, which the server uses to read the file.
+ */
+function xhrUpload(
+  url: string,
+  form: FormData,
+  headers: Record<string, string>,
+  signal: AbortSignal,
+  timeoutMs: number,
+): Promise<UploadResponse> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const onAbort = () => xhr.abort();
+    const cleanup = () => signal.removeEventListener('abort', onAbort);
+
+    xhr.open('POST', url);
+    for (const [key, value] of Object.entries(headers)) xhr.setRequestHeader(key, value);
+    xhr.timeout = timeoutMs;
+    xhr.onload = () => {
+      cleanup();
+      resolve({ status: xhr.status, body: typeof xhr.responseText === 'string' ? xhr.responseText : '' });
+    };
+    xhr.onerror = () => {
+      cleanup();
+      reject(new ApiError(0, 'Could not reach the server. Check your connection and try again.'));
+    };
+    xhr.ontimeout = () => {
+      cleanup();
+      reject(new ApiError(408, 'Upload timed out. Please try again.'));
+    };
+    xhr.onabort = () => {
+      cleanup();
+      reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    xhr.send(form);
+  });
+}
+
+/** Web upload: a real Blob/File in FormData through the browser's fetch. */
+async function webUpload(
+  url: string,
+  file: UploadFileInput,
+  headers: Record<string, string>,
+  signal: AbortSignal,
+): Promise<UploadResponse> {
+  const form = new FormData();
+  if (file.webFile) {
+    form.append('file', file.webFile, file.name);
+  } else {
+    const blob = await (await fetch(file.uri, { signal })).blob();
+    form.append('file', blob, file.name);
+  }
+  try {
+    const res = await fetch(url, { method: 'POST', headers, body: form, signal });
+    return { status: res.status, body: await res.text().catch(() => '') };
+  } catch (err) {
+    if ((err as Error)?.name === 'AbortError') throw err;
+    throw new ApiError(0, 'Could not reach the server. Check your connection and try again.');
+  }
+}
+
+/**
+ * Uploads one file or photo to `POST /api/attachments` (multipart, field
+ * `file`). Images can take a while because the server runs a vision model,
+ * so the timeout is generous.
  */
 export async function uploadAttachment(
   file: UploadFileInput,
   opts: { signal?: AbortSignal; timeoutMs?: number } = {},
 ): Promise<AttachmentMeta> {
+  if (opts.signal?.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
   const controller = new AbortController();
-  let timedOut = false;
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, opts.timeoutMs ?? UPLOAD_TIMEOUT_MS);
-
   const onParentAbort = () => controller.abort();
-  if (opts.signal) {
-    if (opts.signal.aborted) {
-      clearTimeout(timeout);
-      throw Object.assign(new Error('aborted'), { name: 'AbortError' });
-    }
-    opts.signal.addEventListener('abort', onParentAbort, { once: true });
-  }
+  opts.signal?.addEventListener('abort', onParentAbort, { once: true });
+
+  const url = `${baseUrl()}/api/attachments`;
+  const reqHeaders: Record<string, string> = { Accept: 'application/json' };
+  if (authToken) reqHeaders.Authorization = `Bearer ${authToken}`;
 
   try {
-    const formData = new FormData();
+    let response: UploadResponse;
     if (Platform.OS === 'web') {
-      if (file.webFile) {
-        formData.append('file', file.webFile, file.name);
-      } else {
-        const blobRes = await fetch(file.uri, { signal: controller.signal });
-        const blob = await blobRes.blob();
-        formData.append('file', blob, file.name);
-      }
+      response = await webUpload(url, file, reqHeaders, controller.signal);
     } else {
-      formData.append('file', { uri: file.uri, name: file.name, type: file.type } as unknown as Blob);
+      const form = new FormData();
+      form.append('file', { uri: file.uri, name: file.name, type: file.type || 'application/octet-stream' } as unknown as Blob);
+      response = await xhrUpload(url, form, reqHeaders, controller.signal, opts.timeoutMs ?? UPLOAD_TIMEOUT_MS);
     }
 
-    const reqHeaders: Record<string, string> = { Accept: 'application/json' };
-    if (authToken) reqHeaders.Authorization = `Bearer ${authToken}`;
-
-    let res: Response;
+    let data: { attachment?: AttachmentMeta; error?: string } = {};
     try {
-      res = await fetch(`${baseUrl()}/api/attachments`, {
-        method: 'POST',
-        headers: reqHeaders,
-        body: formData,
-        signal: controller.signal,
-      });
-    } catch (err) {
-      if (timedOut) {
-        throw new ApiError(408, 'Upload timed out. Please try again.');
-      }
-      if (opts.signal?.aborted || (err as Error)?.name === 'AbortError') {
-        throw Object.assign(new Error('aborted'), { name: 'AbortError' });
-      }
-      throw new ApiError(0, 'Could not reach the server. Check your connection and try again.');
+      data = JSON.parse(response.body);
+    } catch {
+      // non-JSON error page (e.g. a proxy); fall through to the status check
     }
-
-    const data = (await res.json().catch(() => ({}))) as { attachment?: AttachmentMeta; error?: string };
-    if (!res.ok) {
-      if (res.status === 401 && authToken) onUnauthorized?.();
-      throw new ApiError(res.status, data?.error ?? `Upload failed (${res.status}).`);
+    if (response.status < 200 || response.status >= 300) {
+      if (response.status === 401 && authToken) onUnauthorized?.();
+      throw new ApiError(response.status, data?.error ?? `Upload failed (${response.status}).`);
     }
     if (!data?.attachment) {
-      throw new ApiError(res.status, 'Server returned an invalid attachment response.');
+      throw new ApiError(response.status, 'Server returned an invalid attachment response.');
     }
     return data.attachment;
   } finally {
-    clearTimeout(timeout);
     opts.signal?.removeEventListener('abort', onParentAbort);
   }
 }
