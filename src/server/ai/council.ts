@@ -73,6 +73,8 @@ export async function runCouncil(req: CouncilRequest): Promise<CouncilTurn> {
         type: 'seat:start',
         seatId: seat.id,
         model: primary,
+        name: seat.name,
+        company: seat.providerKey,
       });
 
       let response: SeatResponse;

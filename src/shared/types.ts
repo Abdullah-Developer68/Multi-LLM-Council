@@ -23,8 +23,11 @@ export type SeatTier = 'openrouter' | 'keyless';
 
 /** One council seat's answer inside a turn. */
 export interface SeatResponse {
+  /** Seat id. For user-picked models this is the model id (e.g. `google/gemma-4-31b-it:free`). */
   agentId: string;
   agentName: string;
+  /** Company slug for the logo (`google`, `nvidia`, …). Absent on older turns. */
+  company?: string;
   /** Model that actually produced the answer (after any rotation). */
   model: string;
   answer: string;
@@ -106,7 +109,7 @@ export type CouncilEvent =
   | { type: 'thread'; threadId: string; title: string; created: boolean }
   | { type: 'refine:start'; model: string }
   | { type: 'refine:done'; refinement: TurnRefinement }
-  | { type: 'seat:start'; seatId: string; model: string }
+  | { type: 'seat:start'; seatId: string; model: string; name: string; company: string }
   | { type: 'seat:thinking'; seatId: string }
   | { type: 'seat:rotate'; seatId: string; model: string; reason: string }
   | { type: 'seat:delta'; seatId: string; text: string }
@@ -145,6 +148,9 @@ export interface CouncilStatus {
 
 export interface SeatInsight {
   seatId: string;
+  /** Display name and company slug of the model/seat (from its latest answer). */
+  name?: string;
+  company?: string;
   answered: number;
   failed: number;
   wins: number;
@@ -164,3 +170,48 @@ export interface InsightsSummary {
   /** Turns per day for the last 14 days, oldest first. */
   activity: { date: string; count: number }[];
 }
+
+/* Model picker ------------------------------------------------------------ */
+
+/**
+ * `free`: selectable, answered through free OpenRouter models or the keyless tier.
+ * `pro`: shown locked in the picker (opens the pricing page); never sent to the council.
+ */
+export type ModelAccess = 'free' | 'pro';
+
+/** One entry in the model picker, served by `GET /api/catalog`. */
+export interface CatalogModel {
+  /** Provider model id, e.g. `google/gemma-4-31b-it:free` or `pollinations/openai-fast`. */
+  id: string;
+  /** Display name without company prefix or "(free)", e.g. "Gemma 4 31B". */
+  name: string;
+  /** Company slug used for the logo and filter chips, e.g. `google`, `openai`, `nvidia`. */
+  company: string;
+  /** Company display name, e.g. "Google". */
+  companyName: string;
+  /** One short line describing what the model is good at. */
+  description: string;
+  contextLength: number | null;
+  access: ModelAccess;
+  /** Accepts image input. */
+  vision: boolean;
+  /** Relative cost hint shown like the design's £ / ££ / £££ (free models are 1). */
+  cost: 1 | 2 | 3;
+}
+
+export interface ModelCatalog {
+  models: CatalogModel[];
+  /** Model ids selected for users who have not picked any yet. */
+  defaults: string[];
+  fetchedAt: string;
+}
+
+/** How many models may answer one question. */
+export const MODEL_SELECTION_LIMITS = { min: 1, max: 4 } as const;
+
+/** The three original council seats' primaries; the default selection. */
+export const DEFAULT_MODEL_IDS = [
+  'nvidia/nemotron-3.5-lightning:free',
+  'cohere/north-mini-code:free',
+  'nvidia/nemotron-3-ultra-550b-a55b:free',
+] as const;
