@@ -20,14 +20,14 @@ function CodeBlock({ code, lang }: { code: string; lang: string }) {
   return (
     <View style={[styles.code, { backgroundColor: colors.codeBg, borderColor: colors.border }]}>
       <View style={[styles.codeHeader, { backgroundColor: colors.codeHeader, borderBottomColor: colors.border }]}>
-        <Txt variant="label" tone="secondary">
+        <Txt variant="mono" tone="secondary">
           {lang || 'code'}
         </Txt>
         <Pressable onPress={copy} hitSlop={8} style={styles.codeCopy} accessibilityLabel="Copy code">
           {copied ? (
             <Check size={13} color={colors.success} strokeWidth={2} />
           ) : (
-            <Copy size={13} color={colors.textTertiary} strokeWidth={1.8} />
+            <Copy size={13} color={colors.mutedForeground} strokeWidth={1.75} />
           )}
           <Txt variant="label" tone={copied ? 'success' : 'secondary'}>
             {copied ? 'Copied' : 'Copy code'}
@@ -35,7 +35,7 @@ function CodeBlock({ code, lang }: { code: string; lang: string }) {
         </Pressable>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.codeScroll}>
-        <Text selectable style={[styles.codeText, { color: colors.text }]}>
+        <Text selectable style={[styles.codeText, { color: colors.foreground }]}>
           {code.replace(/\n$/, '')}
         </Text>
       </ScrollView>
@@ -77,56 +77,56 @@ export function MarkdownView({ children }: { children: string }) {
 const MONO = Platform.select({ web: fonts.mono, default: fonts.mono });
 
 const styles = StyleSheet.create({
-  code: { borderWidth: 1, borderRadius: radius.md, marginVertical: 10, overflow: 'hidden' },
+  code: { borderWidth: 1, borderRadius: radius.lg, marginVertical: 10, overflow: 'hidden' },
   codeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 8,
     borderBottomWidth: 1,
   },
   codeCopy: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  codeScroll: { padding: 12 },
+  codeScroll: { padding: 14 },
   codeText: { fontFamily: MONO, fontSize: 12.5, lineHeight: 19 },
 });
 
 const useMarkdownStyles = makeStyles((c) => ({
-  body: { color: c.text, fontFamily: fonts.regular, fontSize: 16, lineHeight: 27 },
+  body: { color: c.foreground, fontFamily: fonts.regular, fontSize: 15, lineHeight: 24, letterSpacing: -0.09 },
   paragraph: { marginTop: 0, marginBottom: 12 },
-  heading1: { fontFamily: fonts.medium, fontSize: 21, lineHeight: 27, letterSpacing: -0.4, marginTop: 8, marginBottom: 8 },
-  heading2: { fontFamily: fonts.medium, fontSize: 18, lineHeight: 24, letterSpacing: -0.3, marginTop: 8, marginBottom: 6 },
-  heading3: { fontFamily: fonts.medium, fontSize: 16, lineHeight: 22, marginTop: 6, marginBottom: 4 },
-  heading4: { fontFamily: fonts.medium, fontSize: 15, lineHeight: 21, marginTop: 4, marginBottom: 4 },
+  heading1: { fontFamily: fonts.semibold, fontSize: 20, lineHeight: 26, letterSpacing: -0.4, marginTop: 10, marginBottom: 8 },
+  heading2: { fontFamily: fonts.semibold, fontSize: 17, lineHeight: 23, letterSpacing: -0.3, marginTop: 10, marginBottom: 6 },
+  heading3: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 21, marginTop: 8, marginBottom: 4 },
+  heading4: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 20, marginTop: 6, marginBottom: 4 },
   strong: { fontFamily: fonts.semibold, fontWeight: '600' },
   em: { fontStyle: 'italic' },
-  link: { color: c.accent, textDecorationLine: 'none' },
-  bullet_list: { marginBottom: 8 },
-  ordered_list: { marginBottom: 8 },
+  link: { color: c.link, textDecorationLine: 'none' },
+  bullet_list: { marginBottom: 10 },
+  ordered_list: { marginBottom: 10 },
   list_item: { marginVertical: 2 },
-  bullet_list_icon: { color: c.textTertiary, marginRight: 8 },
-  ordered_list_icon: { color: c.textTertiary, fontFamily: fonts.mono, fontSize: 13, marginRight: 8 },
+  bullet_list_icon: { color: c.mutedForeground, marginRight: 8 },
+  ordered_list_icon: { color: c.mutedForeground, fontFamily: fonts.mono, fontSize: 13, marginRight: 8 },
   blockquote: {
-    backgroundColor: c.surfaceMuted,
-    borderLeftColor: c.borderStrong,
+    backgroundColor: 'transparent',
+    borderLeftColor: c.input,
     borderLeftWidth: 2,
     paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingVertical: 2,
     marginVertical: 8,
   },
   code_inline: {
     fontFamily: fonts.mono,
     fontSize: 13,
-    backgroundColor: c.codeBg,
-    color: c.text,
-    borderRadius: 4,
-    paddingHorizontal: 4,
+    backgroundColor: c.muted,
+    color: c.foreground,
+    borderRadius: radius.sm,
+    paddingHorizontal: 5,
     borderWidth: 0,
   },
-  hr: { backgroundColor: c.border, height: 1, marginVertical: 14 },
-  table: { borderColor: c.border, borderWidth: 1, borderRadius: radius.sm, marginVertical: 10 },
-  thead: { backgroundColor: c.surfaceMuted },
-  th: { padding: 8, fontFamily: fonts.medium },
-  td: { padding: 8 },
+  hr: { backgroundColor: c.border, height: 1, marginVertical: 16 },
+  table: { borderColor: c.border, borderWidth: 1, borderRadius: radius.md, marginVertical: 10, overflow: 'hidden' },
+  thead: { backgroundColor: c.background },
+  th: { paddingVertical: 9, paddingHorizontal: 12, fontFamily: fonts.medium, color: c.mutedForeground, fontSize: 13 },
+  td: { paddingVertical: 9, paddingHorizontal: 12, fontSize: 13 },
   tr: { borderColor: c.border, borderBottomWidth: 1 },
 }));

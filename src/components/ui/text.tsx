@@ -2,26 +2,31 @@ import { Text, type TextProps } from 'react-native';
 
 import { type, useTheme, type Palette, type TypeVariant } from '@/theme';
 
+/**
+ * Text tones map onto palette roles:
+ * primary → foreground, secondary → mutedForeground, tertiary → faint,
+ * accent → link, inverse → primaryForeground.
+ */
 export type Tone = 'primary' | 'secondary' | 'tertiary' | 'accent' | 'danger' | 'success' | 'warning' | 'inverse';
 
 function toneColor(colors: Palette, tone: Tone): string {
   switch (tone) {
     case 'secondary':
-      return colors.textSecondary;
+      return colors.mutedForeground;
     case 'tertiary':
-      return colors.textTertiary;
+      return colors.faint;
     case 'accent':
-      return colors.accent;
+      return colors.link;
     case 'danger':
-      return colors.danger;
+      return colors.destructive;
     case 'success':
       return colors.success;
     case 'warning':
       return colors.warning;
     case 'inverse':
-      return colors.onPrimary;
+      return colors.primaryForeground;
     default:
-      return colors.text;
+      return colors.foreground;
   }
 }
 
@@ -36,8 +41,8 @@ export function Txt({ variant = 'body', tone = 'primary', color, style, ...rest 
   return <Text {...rest} style={[type[variant], { color: color ?? toneColor(colors, tone) }, style]} />;
 }
 
-/** Small secondary label used for section titles, metadata and hints. */
-export function Label({ children, tone = 'tertiary', ...rest }: TxtProps) {
+/** Small medium-weight label: group titles, field labels, metadata. */
+export function Label({ children, tone = 'secondary', ...rest }: TxtProps) {
   return (
     <Txt variant="label" tone={tone} {...rest}>
       {children}
@@ -45,7 +50,7 @@ export function Label({ children, tone = 'tertiary', ...rest }: TxtProps) {
   );
 }
 
-/** Two-tone editorial headline: a muted lead line over a strong line. */
+/** Two-tone headline: a faint lead line over a strong line. */
 export function Headline({
   muted,
   strong,
@@ -59,8 +64,8 @@ export function Headline({
 }) {
   const { colors } = useTheme();
   return (
-    <Text style={[type[variant], { color: colors.text, textAlign: align }]} accessibilityRole="header">
-      <Text style={{ color: colors.textTertiary }}>{muted}</Text>
+    <Text style={[type[variant], { color: colors.foreground, textAlign: align }]} accessibilityRole="header">
+      <Text style={{ color: colors.faint }}>{muted}</Text>
       {'\n'}
       {strong}
     </Text>

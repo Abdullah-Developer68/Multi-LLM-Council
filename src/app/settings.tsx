@@ -1,47 +1,23 @@
 import Constants from 'expo-constants';
-import { LogOut, Monitor, Moon, ShieldOff, Sun } from 'lucide-react-native';
+import { ChartColumn, Cpu, Layers, LogOut, Monitor, Moon, ShieldOff, Sun, Vibrate } from 'lucide-react-native';
 import { useState } from 'react';
-import { Platform, ScrollView, View } from 'react-native';
+import { Platform, Pressable, ScrollView, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppHeader, BackButton, Screen } from '@/components/shell';
 import { Button } from '@/components/ui/button';
 import { Segmented, Toggle } from '@/components/ui/controls';
-import { Card, Divider, ScreenHeader, SectionHeader } from '@/components/ui/layout';
+import { Card, Divider, ListGroup, ListItem, SectionHeader } from '@/components/ui/layout';
 import { TextField } from '@/components/ui/text-field';
-import { Label, Txt } from '@/components/ui/text';
+import { Txt } from '@/components/ui/text';
 import { initials } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
+import { navigateTo } from '@/lib/nav';
 import { useAppStore } from '@/store';
 import type { ThemePreference } from '@/theme/tokens';
-import { makeStyles, useTheme } from '@/theme';
+import { makeStyles, radius, useTheme } from '@/theme';
 
 const enter = (i: number) => FadeInDown.delay(40 + i * 60).springify().damping(20);
-
-function ToggleRow({
-  title,
-  body,
-  value,
-  onChange,
-}: {
-  title: string;
-  body: string;
-  value: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  const styles = useStyles();
-  return (
-    <View style={styles.toggleRow}>
-      <View style={styles.flex}>
-        <Txt variant="calloutMedium">{title}</Txt>
-        <Txt variant="caption" tone="secondary">
-          {body}
-        </Txt>
-      </View>
-      <Toggle value={value} onChange={onChange} label={title} />
-    </View>
-  );
-}
 
 export default function SettingsScreen() {
   const styles = useStyles();
@@ -60,10 +36,10 @@ export default function SettingsScreen() {
   const [name, setName] = useState(user?.fullName ?? '');
   const [saving, setSaving] = useState(false);
   const [confirmEverywhere, setConfirmEverywhere] = useState(false);
-  const dirty = name.trim() && name.trim() !== user?.fullName;
+  const dirty = !!name.trim() && name.trim() !== user?.fullName;
 
   const saveName = async () => {
-    if (!dirty) return;
+    if (!dirty || saving) return;
     setSaving(true);
     try {
       await updateName(name.trim());
@@ -79,123 +55,138 @@ export default function SettingsScreen() {
   const memberSince = user ? new Date(user.createdAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : '';
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <ScreenHeader title="Settings" />
+    <Screen
+      header={
+        <AppHeader
+          title="Settings"
+          leading={<BackButton />}
+          trailing={
+            dirty ? (
+              <Pressable onPress={saveName} hitSlop={8} accessibilityRole="button" style={styles.save}>
+                <Txt variant="bodyMedium" style={styles.saveText} tone={saving ? 'secondary' : 'primary'}>
+                  {saving ? 'Saving…' : 'Save'}
+                </Txt>
+              </Pressable>
+            ) : null
+          }
+        />
+      }
+    >
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <Animated.View entering={enter(0)} style={styles.profile}>
-          <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-            <Txt variant="title" color={colors.onPrimary}>
-              {initials(user?.fullName, user?.email)}
-            </Txt>
-          </View>
-          <View style={styles.flex}>
-            <Txt variant="headline" numberOfLines={1}>
-              {user?.fullName}
-            </Txt>
-            <Txt variant="callout" tone="secondary" numberOfLines={1}>
-              {user?.email}
-            </Txt>
-            {memberSince ? <Label style={styles.since}>Member since {memberSince}</Label> : null}
-          </View>
+        <Animated.View entering={enter(0)}>
+          <Card padded={false}>
+            <View style={styles.profile}>
+              <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
+                <Txt variant="title" color={colors.primaryForeground}>
+                  {initials(user?.fullName, user?.email)}
+                </Txt>
+              </View>
+              <View style={styles.flex}>
+                <Txt variant="headline" numberOfLines={1}>
+                  {user?.fullName ?? 'Account'}
+                </Txt>
+                <Txt variant="callout" tone="secondary" numberOfLines={1}>
+                  {user?.email}
+                </Txt>
+                {memberSince ? (
+                  <Txt variant="caption" tone="tertiary">
+                    Member since {memberSince}
+                  </Txt>
+                ) : null}
+              </View>
+            </View>
+            <Divider />
+            <View style={styles.nameField}>
+              <TextField
+                label="Display name"
+                value={name}
+                onChangeText={setName}
+                maxLength={80}
+                returnKeyType="done"
+                onSubmitEditing={saveName}
+                size="lg"
+              />
+            </View>
+          </Card>
         </Animated.View>
 
         <Animated.View entering={enter(1)}>
-          <SectionHeader title="Profile" />
-          <Card style={styles.gap}>
-            <TextField label="Display name" value={name} onChangeText={setName} maxLength={80} returnKeyType="done" onSubmitEditing={saveName} />
-            {dirty ? (
-              <Animated.View entering={FadeIn.duration(160)} style={styles.right}>
-                <Button label="Save name" size="sm" loading={saving} onPress={saveName} />
-              </Animated.View>
-            ) : null}
-          </Card>
+          <SectionHeader title="Appearance" />
+          <Segmented<ThemePreference>
+            variant="tabs"
+            value={themePreference}
+            onChange={setThemePreference}
+            options={[
+              { value: 'light', label: 'Light', icon: Sun },
+              { value: 'dark', label: 'Dark', icon: Moon },
+              { value: 'system', label: 'System', icon: Monitor },
+            ]}
+          />
         </Animated.View>
 
         <Animated.View entering={enter(2)}>
-          <SectionHeader title="Appearance" />
-          <Card style={styles.gap}>
-            <Segmented<ThemePreference>
-              value={themePreference}
-              onChange={setThemePreference}
-              options={[
-                { value: 'system', label: 'System', icon: Monitor },
-                { value: 'light', label: 'Light', icon: Sun },
-                { value: 'dark', label: 'Dark', icon: Moon },
-              ]}
+          <SectionHeader title="Council" />
+          <ListGroup>
+            <ListItem
+              icon={Layers}
+              title="Conversation memory"
+              trailing={<Toggle value={contextEnabled} onChange={setContextEnabled} label="Conversation memory" />}
             />
-            <Txt variant="caption" tone="tertiary">
-              System follows your device. Your choice is saved on this device.
-            </Txt>
-          </Card>
+            {Platform.OS !== 'web' ? (
+              <ListItem
+                icon={Vibrate}
+                title="Haptic feedback"
+                trailing={<Toggle value={hapticsEnabled} onChange={setHapticsEnabled} label="Haptic feedback" />}
+              />
+            ) : null}
+            <ListItem icon={Cpu} title="Council status" value="3 seats" onPress={() => navigateTo('/settings', '/council')} />
+            <ListItem icon={ChartColumn} title="Insights" onPress={() => navigateTo('/settings', '/insights')} />
+          </ListGroup>
+          <Txt variant="caption" tone="secondary" style={styles.footnote}>
+            Memory sends a summary of the last three turns with each follow-up so the council keeps context.
+          </Txt>
         </Animated.View>
 
         <Animated.View entering={enter(3)}>
-          <SectionHeader title="Council" />
-          <Card padded={false}>
-            <ToggleRow
-              title="Conversation memory"
-              body="Send a summary of the last three turns with each follow-up so the council keeps context."
-              value={contextEnabled}
-              onChange={setContextEnabled}
-            />
-            {Platform.OS !== 'web' ? (
-              <>
-                <Divider inset={16} />
-                <ToggleRow
-                  title="Haptic feedback"
-                  body="Subtle taps when you send, swipe between seats, or vote."
-                  value={hapticsEnabled}
-                  onChange={setHapticsEnabled}
-                />
-              </>
-            ) : null}
-          </Card>
-        </Animated.View>
-
-        <Animated.View entering={enter(4)}>
-          <SectionHeader title="Account" />
-          <Card style={styles.gap}>
-            <Button label="Sign out" variant="secondary" icon={LogOut} fullWidth onPress={() => signOut()} />
-            {confirmEverywhere ? (
-              <Animated.View entering={FadeIn.duration(160)} style={styles.gap}>
-                <Txt variant="caption" tone="secondary">
-                  This signs you out on every device, including this one.
+          <ListGroup>
+            <ListItem icon={LogOut} title="Sign out" onPress={() => signOut()} />
+            <ListItem title="Sign out of all devices" destructive onPress={() => setConfirmEverywhere(true)} />
+          </ListGroup>
+          {confirmEverywhere ? (
+            <Animated.View entering={FadeIn.duration(160)} style={[styles.confirm, { backgroundColor: colors.destructiveSoft }]}>
+              <View style={styles.confirmText}>
+                <ShieldOff size={16} color={colors.destructive} strokeWidth={1.75} />
+                <Txt variant="callout" tone="danger" style={styles.flex}>
+                  This ends every session, including this one. You will need to log in again on each device.
                 </Txt>
-                <View style={styles.row}>
-                  <Button label="Cancel" variant="secondary" size="sm" onPress={() => setConfirmEverywhere(false)} />
-                  <Button label="Sign out everywhere" variant="danger" size="sm" onPress={() => signOut({ everywhere: true })} />
-                </View>
-              </Animated.View>
-            ) : (
-              <Button
-                label="Sign out of all devices"
-                variant="ghost"
-                icon={ShieldOff}
-                fullWidth
-                onPress={() => setConfirmEverywhere(true)}
-              />
-            )}
-          </Card>
+              </View>
+              <View style={styles.confirmButtons}>
+                <Button label="Cancel" variant="outline" size="sm" onPress={() => setConfirmEverywhere(false)} />
+                <Button label="Sign out everywhere" variant="destructive" size="sm" onPress={() => signOut({ everywhere: true })} />
+              </View>
+            </Animated.View>
+          ) : null}
         </Animated.View>
 
-        <Label style={styles.version}>
+        <Txt variant="label" tone="tertiary" style={styles.version}>
           Council v{Constants.expoConfig?.version ?? '2.0.0'} · Expo SDK 58
-        </Label>
+        </Txt>
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
-const useStyles = makeStyles((c) => ({
-  safe: { flex: 1, backgroundColor: c.bg },
-  scroll: { padding: 20, gap: 28, paddingBottom: 48, width: '100%', maxWidth: 640, alignSelf: 'center' },
-  profile: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  avatar: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
-  since: { marginTop: 6 },
-  gap: { gap: 12 },
-  right: { alignItems: 'flex-end' },
-  row: { flexDirection: 'row', gap: 10 },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 16, padding: 16 },
-  version: { textAlign: 'center' },
+const useStyles = makeStyles(() => ({
   flex: { flex: 1 },
+  scroll: { padding: 16, gap: 24, paddingBottom: 48 },
+  save: { paddingHorizontal: 10, height: 40, justifyContent: 'center' },
+  saveText: { fontSize: 15 },
+  profile: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 },
+  avatar: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
+  nameField: { padding: 16 },
+  footnote: { marginTop: 8, paddingHorizontal: 4 },
+  confirm: { gap: 12, padding: 14, borderRadius: radius.lg, marginTop: 12 },
+  confirmText: { flexDirection: 'row', gap: 10 },
+  confirmButtons: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' },
+  version: { textAlign: 'center' },
 }));

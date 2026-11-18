@@ -1,5 +1,5 @@
-import { CircleAlert, CircleCheck } from 'lucide-react-native';
-import { useEffect } from 'react';
+import { CircleAlert, CircleCheck, Info } from 'lucide-react-native';
+import { useEffect, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type DimensionValue, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   Easing,
@@ -15,10 +15,10 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAppStore } from '@/store';
-import { radius, useTheme } from '@/theme';
+import { elevation, radius, useTheme } from '@/theme';
 import { Txt } from './text';
 
-/** Pulsing placeholder block. */
+/** Pulsing placeholder block (shadcn Skeleton: muted fill, radius md). */
 export function Skeleton({
   width = '100%',
   height = 14,
@@ -29,22 +29,34 @@ export function Skeleton({
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useTheme();
-  const pulse = useSharedValue(0.55);
+  const pulse = useSharedValue(0.5);
   useEffect(() => {
-    pulse.set(withRepeat(withTiming(1, { duration: 850, easing: Easing.inOut(Easing.quad) }), -1, true));
+    pulse.set(withRepeat(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }), -1, true));
   }, [pulse]);
   const animatedStyle = useAnimatedStyle(() => ({ opacity: pulse.get() }));
   return (
     <Animated.View
-      style={[{ width, height, borderRadius: height / 2, backgroundColor: colors.skeleton }, animatedStyle, style]}
+      style={[{ width, height, borderRadius: Math.min(radius.md, height / 2), backgroundColor: colors.muted }, animatedStyle, style]}
     />
   );
 }
 
-/**
- * Segmented progress bar (the blue "2/5" bar): filled segments are done,
- * the next one shimmers while in progress.
- */
+/** Thin progress track with a foreground fill (the "credits" bar in the design). */
+export function Progress({ value, color }: { value: number; color?: string }) {
+  const { colors } = useTheme();
+  const clamped = Math.max(0, Math.min(1, value));
+  return (
+    <View
+      style={[styles.track, { backgroundColor: colors.muted }]}
+      accessibilityRole="progressbar"
+      accessibilityValue={{ min: 0, max: 100, now: Math.round(clamped * 100) }}
+    >
+      <View style={[styles.fill, { width: `${clamped * 100}%`, backgroundColor: color ?? colors.foreground }]} />
+    </View>
+  );
+}
+
+/** Segmented progress bar: filled segments are done, the next one pulses. */
 export function ProgressSegments({ total, done, active = true }: { total: number; done: number; active?: boolean }) {
   return (
     <View style={styles.segments} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: total, now: done }}>
@@ -67,8 +79,8 @@ function Segment({ state }: { state: 'done' | 'active' | 'idle' }) {
   }, [state, glow]);
   const fill = useAnimatedStyle(() => ({ opacity: glow.get() }));
   return (
-    <View style={[styles.segment, { backgroundColor: colors.border }]}>
-      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: colors.accent, borderRadius: 2 }, fill]} />
+    <View style={[styles.segment, { backgroundColor: colors.muted }]}>
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: colors.foreground, borderRadius: 2 }, fill]} />
     </View>
   );
 }
@@ -83,6 +95,51 @@ export function PulseDot({ color, size = 7 }: { color: string; size?: number }) 
   return <Animated.View style={[{ width: size, height: size, borderRadius: size / 2, backgroundColor: color }, style]} />;
 }
 
+/** Inline alert: a tinted box with an icon, used for errors and notices. */
+export function Alert({
+  tone = 'danger',
+  title,
+  children,
+  style,
+}: {
+  tone?: 'danger' | 'info';
+  title?: string;
+  children?: ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  const danger = tone === 'danger';
+  const fg = danger ? colors.destructive : colors.foreground;
+  const Icon = danger ? CircleAlert : Info;
+  return (
+    <View
+      style={[
+        styles.alert,
+        { backgroundColor: danger ? colors.destructiveSoft : colors.card, borderColor: danger ? 'transparent' : colors.border },
+        style,
+      ]}
+      accessibilityRole="alert"
+    >
+      <Icon size={16} color={fg} strokeWidth={1.75} style={styles.alertIcon} />
+      <View style={styles.alertBody}>
+        {title ? (
+          <Txt variant="calloutMedium" color={fg}>
+            {title}
+          </Txt>
+        ) : null}
+        {typeof children === 'string' ? (
+          <Txt variant="callout" color={danger ? colors.destructive : colors.mutedForeground}>
+            {children}
+          </Txt>
+        ) : (
+          children
+        )}
+      </View>
+    </View>
+  );
+}
+
+/** Sonner-style toasts: a popover card with an icon, stacked at the top. */
 export function ToastHost() {
   const toasts = useAppStore((s) => s.toasts);
   const dismiss = useAppStore((s) => s.dismissToast);
@@ -90,10 +147,10 @@ export function ToastHost() {
   const insets = useSafeAreaInsets();
 
   return (
-    <View pointerEvents="box-none" style={[styles.toastHost, { top: insets.top + 8 }]}>
+    <View pointerEvents="box-none" style={[styles.toastHost, { top: insets.top + 12 }]}>
       {toasts.map((toast) => {
         const Icon = toast.tone === 'danger' ? CircleAlert : CircleCheck;
-        const tint = toast.tone === 'danger' ? colors.danger : toast.tone === 'success' ? colors.success : colors.text;
+        const tint = toast.tone === 'danger' ? colors.destructive : toast.tone === 'success' ? colors.success : colors.foreground;
         return (
           <Animated.View
             key={toast.id}
@@ -103,10 +160,10 @@ export function ToastHost() {
           >
             <Pressable
               onPress={() => dismiss(toast.id)}
-              style={[styles.toast, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              style={[styles.toast, { backgroundColor: colors.popover, borderColor: colors.border }, elevation(colors, 2)]}
               accessibilityRole="alert"
             >
-              <Icon size={16} color={tint} strokeWidth={1.8} />
+              <Icon size={16} color={tint} strokeWidth={1.75} />
               <Txt variant="callout" style={styles.toastText} numberOfLines={3}>
                 {toast.message}
               </Txt>
@@ -119,23 +176,24 @@ export function ToastHost() {
 }
 
 const styles = StyleSheet.create({
+  track: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  fill: { height: 6, borderRadius: 3 },
   segments: { flexDirection: 'row', gap: 4, height: 3 },
   segment: { flex: 1, borderRadius: 2, overflow: 'hidden' },
+  alert: { flexDirection: 'row', gap: 10, padding: 12, borderRadius: radius.md, borderWidth: 1 },
+  alertIcon: { marginTop: 2 },
+  alertBody: { flex: 1, gap: 2 },
   toastHost: { position: 'absolute', left: 16, right: 16, alignItems: 'center', gap: 8, zIndex: 1000 },
   toast: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: radius.pill,
+    paddingVertical: 12,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    maxWidth: 460,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
+    minWidth: 260,
+    maxWidth: 420,
   },
   toastText: { flexShrink: 1 },
 });

@@ -1,56 +1,86 @@
 import { Eye, EyeOff, type LucideIcon } from 'lucide-react-native';
-import { useState, type Ref } from 'react';
+import { useState, type ReactNode, type Ref } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput, View, type TextInputInstance, type TextInputProps } from 'react-native';
-import Animated, { FadeIn, FadeOut, interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
-import { fonts, radius, useTheme } from '@/theme';
+import { control, fonts, radius, useTheme } from '@/theme';
 import { Txt } from './text';
 
 export interface TextFieldProps extends TextInputProps {
   label?: string;
+  hint?: string;
   error?: string | null;
   icon?: LucideIcon;
+  /** Element at the trailing edge, inside the field (a badge, a button). */
+  trailing?: ReactNode;
   secure?: boolean;
+  size?: 'md' | 'lg';
   ref?: Ref<TextInputInstance>;
 }
 
-/** Labelled input whose border animates to the focus colour. */
-export function TextField({ label, error, icon: Icon, secure = false, onFocus, onBlur, style, ref, ...rest }: TextFieldProps) {
+/** shadcn input: input-coloured border, radius md, a soft ring on focus. */
+export function TextField({
+  label,
+  hint,
+  error,
+  icon: Icon,
+  trailing,
+  secure = false,
+  size = 'md',
+  editable = true,
+  onFocus,
+  onBlur,
+  style,
+  ref,
+  ...rest
+}: TextFieldProps) {
   const { colors } = useTheme();
   const [hidden, setHidden] = useState(secure);
-  const focus = useSharedValue(0);
-
-  const frameStyle = useAnimatedStyle(() => ({
-    borderColor: error
-      ? colors.danger
-      : interpolateColor(focus.get(), [0, 1], [colors.borderStrong, colors.accent]),
-  }));
+  const [focused, setFocused] = useState(false);
+  const ringColor = error ? colors.destructive : colors.ring;
 
   return (
     <View style={styles.wrap}>
       {label ? (
-        <Txt variant="caption" tone="secondary" style={styles.label}>
+        <Txt variant="calloutMedium" style={styles.label}>
           {label}
         </Txt>
       ) : null}
-      <Animated.View style={[styles.frame, { backgroundColor: colors.surface }, frameStyle]}>
-        {Icon ? <Icon size={16} color={colors.textTertiary} strokeWidth={1.7} /> : null}
+      <View
+        style={[
+          styles.frame,
+          {
+            height: size === 'lg' ? control.lg : control.md,
+            backgroundColor: editable ? colors.card : colors.muted,
+            borderColor: focused || error ? ringColor : colors.input,
+          },
+          focused && { boxShadow: `0px 0px 0px 3px ${error ? colors.destructiveSoft : colors.muted}` },
+        ]}
+      >
+        {Icon ? <Icon size={16} color={colors.mutedForeground} strokeWidth={1.75} /> : null}
         <TextInput
           ref={ref}
           {...rest}
+          editable={editable}
           secureTextEntry={hidden}
-          placeholderTextColor={colors.textTertiary}
-          selectionColor={colors.accent}
+          placeholderTextColor={colors.mutedForeground}
+          selectionColor={colors.foreground}
           onFocus={(e) => {
-            focus.set(withTiming(1, { duration: 160 }));
+            setFocused(true);
             onFocus?.(e);
           }}
           onBlur={(e) => {
-            focus.set(withTiming(0, { duration: 160 }));
+            setFocused(false);
             onBlur?.(e);
           }}
-          style={[styles.input, { color: colors.text }, Platform.OS === 'web' && styles.webInput, style]}
+          style={[
+            styles.input,
+            { color: editable ? colors.foreground : colors.mutedForeground },
+            Platform.OS === 'web' && styles.webInput,
+            style,
+          ]}
         />
+        {trailing}
         {secure ? (
           <Pressable
             onPress={() => setHidden((h) => !h)}
@@ -59,37 +89,39 @@ export function TextField({ label, error, icon: Icon, secure = false, onFocus, o
             accessibilityLabel={hidden ? 'Show password' : 'Hide password'}
           >
             {hidden ? (
-              <Eye size={17} color={colors.textTertiary} strokeWidth={1.7} />
+              <Eye size={16} color={colors.mutedForeground} strokeWidth={1.75} />
             ) : (
-              <EyeOff size={17} color={colors.textTertiary} strokeWidth={1.7} />
+              <EyeOff size={16} color={colors.mutedForeground} strokeWidth={1.75} />
             )}
           </Pressable>
         ) : null}
-      </Animated.View>
+      </View>
       {error ? (
         <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)}>
-          <Txt variant="caption" tone="danger" style={styles.error}>
+          <Txt variant="caption" tone="danger">
             {error}
           </Txt>
         </Animated.View>
+      ) : hint ? (
+        <Txt variant="caption" tone="secondary">
+          {hint}
+        </Txt>
       ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: 6 },
-  label: { marginLeft: 14 },
+  wrap: { gap: 8 },
+  label: { fontSize: 13 },
   frame: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     borderWidth: 1,
-    borderRadius: radius.pill,
-    paddingHorizontal: 18,
-    minHeight: 52,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
   },
-  input: { flex: 1, fontFamily: fonts.regular, fontSize: 15, paddingVertical: 12 },
+  input: { flex: 1, fontFamily: fonts.regular, fontSize: 14, paddingVertical: 0, height: '100%' },
   webInput: { outlineStyle: 'none' } as object,
-  error: { marginLeft: 14 },
 });

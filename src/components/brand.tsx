@@ -2,13 +2,13 @@ import { StyleSheet, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import { providerFromModel, type ProviderKey } from '@/shared/council';
-import { fonts, useTheme } from '@/theme';
+import { fonts, radius, useTheme } from '@/theme';
 import { Txt } from './ui/text';
 
 /** Council mark: three seats around a table. */
 export function LogoMark({ size = 20, color }: { size?: number; color?: string }) {
   const { colors } = useTheme();
-  const fill = color ?? colors.text;
+  const fill = color ?? colors.foreground;
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
       <Circle cx="12" cy="6" r="4.2" fill={fill} />
@@ -18,13 +18,26 @@ export function LogoMark({ size = 20, color }: { size?: number; color?: string }
   );
 }
 
-export function Wordmark({ size = 20 }: { size?: number }) {
+/** The mark on a primary tile (26px in the sidebar, 48px on the new-chat screen). */
+export function LogoTile({ size = 26 }: { size?: number }) {
+  const { colors } = useTheme();
+  return (
+    <View
+      style={[
+        styles.logoTile,
+        { width: size, height: size, borderRadius: Math.round(size * 0.27), backgroundColor: colors.primary },
+      ]}
+    >
+      <LogoMark size={Math.round(size * 0.54)} color={colors.primaryForeground} />
+    </View>
+  );
+}
+
+export function Wordmark({ size = 26 }: { size?: number }) {
   return (
     <View style={styles.wordmark}>
-      <LogoMark size={size} />
-      <Txt style={{ fontFamily: fonts.medium, fontSize: size * 0.92, lineHeight: size * 1.2, letterSpacing: -0.4 }}>
-        Council
-      </Txt>
+      <LogoTile size={size} />
+      <Txt style={{ fontFamily: fonts.semibold, fontSize: 16, lineHeight: 20, letterSpacing: -0.32 }}>Council</Txt>
     </View>
   );
 }
@@ -73,7 +86,7 @@ export function ProviderLogo({ model, provider, size = 30 }: { model?: string; p
     <View
       style={[
         styles.tile,
-        { width: size, height: size, borderRadius: size * 0.3, backgroundColor: colors.surfaceMuted, borderColor: colors.border },
+        { width: size, height: size, borderRadius: Math.min(radius.md, size * 0.3), backgroundColor: colors.muted, borderColor: colors.border },
       ]}
     >
       {key === 'nvidia' ? (
@@ -90,6 +103,7 @@ export function ProviderLogo({ model, provider, size = 30 }: { model?: string; p
 }
 
 const styles = StyleSheet.create({
-  wordmark: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  wordmark: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  logoTile: { alignItems: 'center', justifyContent: 'center' },
   tile: { alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
 });

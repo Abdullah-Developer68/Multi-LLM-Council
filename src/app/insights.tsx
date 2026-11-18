@@ -2,12 +2,12 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ProviderLogo } from '@/components/brand';
+import { AppHeader, BackButton, Screen } from '@/components/shell';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/feedback';
-import { Card, Divider, ScreenHeader, SectionHeader } from '@/components/ui/layout';
+import { Card, CardHeader, Divider, SectionHeader } from '@/components/ui/layout';
 import { Headline, Label, Txt } from '@/components/ui/text';
 import { api } from '@/lib/api';
 import { formatLatency, formatPercent, pad2 } from '@/lib/format';
@@ -33,15 +33,19 @@ function useCountUp(target: number) {
   return value;
 }
 
-function StatTile({ label, value, index }: { label: string; value: number; index: number }) {
+function StatTile({ label, value }: { label: string; value: number }) {
   const styles = useStyles();
   const shown = useCountUp(value);
   return (
-    <View style={[styles.tile, index % 2 === 1 && styles.tileRight, index > 1 && styles.tileBottom]}>
-      <Txt variant="display">{shown}</Txt>
-      <Txt variant="caption" tone="secondary">
-        {label}
-      </Txt>
+    <View style={styles.tileWrap}>
+      <Card style={styles.tile}>
+        <Txt variant="callout" tone="secondary">
+          {label}
+        </Txt>
+        <Txt variant="display" style={styles.tileValue}>
+          {shown}
+        </Txt>
+      </Card>
     </View>
   );
 }
@@ -55,7 +59,7 @@ function ActivityBar({ ratio, index, count }: { ratio: number; index: number; co
   const style = useAnimatedStyle(() => ({ height: `${Math.max(height.get() * 100, count ? 6 : 2)}%` }));
   return (
     <View style={{ flex: 1, height: '100%', justifyContent: 'flex-end' }}>
-      <Animated.View style={[{ borderRadius: 3, backgroundColor: count ? colors.text : colors.border }, style]} />
+      <Animated.View style={[{ borderRadius: 4, backgroundColor: count ? colors.foreground : colors.muted }, style]} />
     </View>
   );
 }
@@ -68,8 +72,8 @@ function ShareBar({ ratio, color }: { ratio: number; color: string }) {
   }, [ratio, width]);
   const style = useAnimatedStyle(() => ({ width: `${width.get() * 100}%` }));
   return (
-    <View style={{ height: 4, borderRadius: 2, backgroundColor: colors.surfaceSunken, overflow: 'hidden' }}>
-      <Animated.View style={[{ height: 4, borderRadius: 2, backgroundColor: color }, style]} />
+    <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.muted, overflow: 'hidden' }}>
+      <Animated.View style={[{ height: 6, borderRadius: 3, backgroundColor: color }, style]} />
     </View>
   );
 }
@@ -109,39 +113,47 @@ export default function InsightsScreen() {
   const totalWins = Math.max(1, data?.totals.votes ?? 0);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <ScreenHeader title="Insights" />
-      <ScrollView contentContainerStyle={styles.scroll} refreshControl={<RefreshControl refreshing={refreshing && !!data} onRefresh={load} />}>
+    <Screen
+      header={
+        <AppHeader
+          title="Insights"
+          leading={<BackButton />}
+        />
+      }
+    >
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        refreshControl={<RefreshControl refreshing={refreshing && !!data} onRefresh={load} />}
+      >
         <Animated.View entering={FadeInDown.springify().damping(20)} style={styles.hero}>
           <Headline variant="title" muted="Your council," strong="by the numbers." />
         </Animated.View>
 
         {!data ? (
           <View style={styles.gap}>
-            <Skeleton height={200} style={{ borderRadius: radius.md }} />
-            <Skeleton height={160} style={{ borderRadius: radius.md }} />
+            <Skeleton height={200} style={{ borderRadius: radius.lg }} />
+            <Skeleton height={160} style={{ borderRadius: radius.lg }} />
           </View>
         ) : data.totals.turns === 0 ? (
           <Card style={styles.gap}>
-            <Txt variant="bodyMedium">Nothing to measure yet</Txt>
-            <Txt tone="secondary">Ask the council a few questions and prefer the answers you like — your stats will appear here.</Txt>
+            <CardHeader
+              title="Nothing to measure yet"
+              description="Ask the council a few questions and prefer the answers you like — your stats will appear here."
+            />
             <Button label="Ask a question" onPress={() => router.back()} />
           </Card>
         ) : (
           <>
-            <Animated.View entering={FadeInDown.delay(60).springify().damping(20)}>
-              <SectionHeader title="Totals" />
-              <View style={styles.grid}>
-                <StatTile index={0} label="Conversations" value={data.totals.threads} />
-                <StatTile index={1} label="Council turns" value={data.totals.turns} />
-                <StatTile index={2} label="Preferences cast" value={data.totals.votes} />
-                <StatTile index={3} label="Consensus built" value={data.totals.synthesized} />
-              </View>
+            <Animated.View entering={FadeInDown.delay(60).springify().damping(20)} style={styles.grid}>
+              <StatTile label="Conversations" value={data.totals.threads} />
+              <StatTile label="Council turns" value={data.totals.turns} />
+              <StatTile label="Preferences cast" value={data.totals.votes} />
+              <StatTile label="Consensus built" value={data.totals.synthesized} />
             </Animated.View>
 
             <Animated.View entering={FadeInDown.delay(120).springify().damping(20)}>
-              <SectionHeader title="Last 14 days" />
-              <Card>
+              <Card style={styles.gap}>
+                <CardHeader title="Activity" description="Council turns per day, last 14 days." />
                 <View style={styles.chart}>
                   {data.activity.map((a, i) => (
                     <ActivityBar key={a.date} ratio={a.count / max} index={i} count={a.count} />
@@ -171,12 +183,12 @@ export default function InsightsScreen() {
                           <ProviderLogo provider={def?.providerKey} size={30} />
                           <View style={styles.flex}>
                             <Txt variant="calloutMedium">{def?.name ?? seat.seatId}</Txt>
-                            <Txt variant="caption" tone="tertiary">
+                            <Txt variant="caption" tone="secondary">
                               {seat.wins} {seat.wins === 1 ? 'preference' : 'preferences'} · {formatPercent(seat.wins / totalWins)} of votes
                             </Txt>
                           </View>
                         </View>
-                        <ShareBar ratio={seat.wins / totalWins} color={colors.seats[seat.seatId] ?? colors.accent} />
+                        <ShareBar ratio={seat.wins / totalWins} color={colors.seats[seat.seatId] ?? colors.foreground} />
                         <View style={styles.seatStats}>
                           <SeatStat label="Answered" value={`${seat.answered}/${total}`} />
                           <SeatStat label="Avg latency" value={formatLatency(seat.avgLatencyMs)} />
@@ -192,7 +204,7 @@ export default function InsightsScreen() {
           </>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
@@ -205,25 +217,16 @@ function SeatStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-const useStyles = makeStyles((c) => ({
-  safe: { flex: 1, backgroundColor: c.bg },
-  scroll: { padding: 20, gap: 28, paddingBottom: 48, width: '100%', maxWidth: 720, alignSelf: 'center' },
+const useStyles = makeStyles(() => ({
+  scroll: { padding: 16, gap: 24, paddingBottom: 48 },
   hero: { gap: 12 },
-  gap: { gap: 12 },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    backgroundColor: c.surface,
-    borderWidth: 1,
-    borderColor: c.border,
-    borderRadius: radius.md,
-    overflow: 'hidden',
-  },
-  tile: { width: '50%', padding: 16, gap: 8 },
-  tileRight: { borderLeftWidth: 1, borderColor: c.border },
-  tileBottom: { borderTopWidth: 1, borderColor: c.border },
+  gap: { gap: 16 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', margin: -6 },
+  tileWrap: { flexGrow: 1, flexBasis: 150, padding: 6 },
+  tile: { gap: 8, padding: 16 },
+  tileValue: { fontSize: 28, lineHeight: 34 },
   chart: { height: 120, flexDirection: 'row', alignItems: 'flex-end', gap: 5 },
-  chartLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
+  chartLabels: { flexDirection: 'row', justifyContent: 'space-between' },
   seat: { padding: 16, gap: 12 },
   seatTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   seatStats: { flexDirection: 'row', gap: 8 },

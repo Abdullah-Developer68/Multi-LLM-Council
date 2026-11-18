@@ -64,7 +64,7 @@ export function DirectiveInspector({ byName, directive }: { byName: string; dire
           Brief from {byName}
         </Txt>
         <Animated.View style={chevron}>
-          <ChevronRight size={15} color={colors.textSecondary} strokeWidth={2} />
+          <ChevronRight size={15} color={colors.mutedForeground} strokeWidth={2} />
         </Animated.View>
       </Pressable>
 
@@ -125,7 +125,7 @@ function Line({ label, text }: { label: string; text: string }) {
 const useStyles = makeStyles((c) => ({
   wrap: { marginBottom: 6 },
   toggle: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingVertical: 4 },
-  panel: { borderLeftWidth: 2, borderColor: c.border, paddingLeft: 14, marginTop: 6, marginBottom: 8, gap: 12 },
+  panel: { borderLeftWidth: 2, borderColor: c.input, paddingLeft: 14, marginTop: 6, marginBottom: 8, gap: 12 },
   sections: { gap: 10 },
   links: { flexDirection: 'row', gap: 16 },
 }));

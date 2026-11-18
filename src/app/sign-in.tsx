@@ -3,19 +3,21 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View, type TextI
 import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { LogoMark } from '@/components/brand';
+import { LogoTile } from '@/components/brand';
 import { Button } from '@/components/ui/button';
+import { Alert } from '@/components/ui/feedback';
+import { Card } from '@/components/ui/layout';
 import { TextField } from '@/components/ui/text-field';
 import { Txt } from '@/components/ui/text';
 import { haptic } from '@/lib/haptics';
 import { useAppStore } from '@/store';
-import { makeStyles, radius, useTheme } from '@/theme';
+import { fonts, makeStyles } from '@/theme';
 
 type Mode = 'signin' | 'signup';
 
+/** shadcn login card: logo tile, title, labelled inputs, one primary action. */
 export default function SignInScreen() {
   const styles = useStyles();
-  const { colors } = useTheme();
   const signIn = useAppStore((s) => s.signIn);
   const signUp = useAppStore((s) => s.signUp);
 
@@ -57,81 +59,90 @@ export default function SignInScreen() {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Animated.View entering={FadeInDown.springify().damping(20)} style={styles.column} layout={LinearTransition.springify().damping(20)}>
-            <View style={styles.logo}>
-              <LogoMark size={38} />
+            <View style={styles.brand}>
+              <LogoTile size={40} />
+              <Txt style={styles.brandName}>Council</Txt>
             </View>
-            <Animated.View key={mode} entering={FadeIn.duration(220)} style={styles.heading}>
-              <Txt variant="title" style={styles.center}>
-                {isSignUp ? 'Create your account' : 'Welcome back'}
-              </Txt>
-              <Txt tone="secondary" style={styles.center}>
-                {isSignUp ? 'Three AI models, one conversation. Free to use.' : 'Log in to continue your conversations.'}
-              </Txt>
-            </Animated.View>
 
-            {isSignUp ? (
-              <Animated.View entering={FadeIn.duration(220)} exiting={FadeOut.duration(120)}>
-                <TextField
-                  value={fullName}
-                  onChangeText={setFullName}
-                  placeholder="Full name"
-                  autoComplete="name"
-                  textContentType="name"
-                  returnKeyType="next"
-                  onSubmitEditing={() => emailRef.current?.focus()}
-                  accessibilityLabel="Full name"
-                />
+            <Card style={styles.card}>
+              <Animated.View key={mode} entering={FadeIn.duration(220)} style={styles.heading}>
+                <Txt variant="title" style={styles.center}>
+                  {isSignUp ? 'Create your account' : 'Welcome back'}
+                </Txt>
+                <Txt tone="secondary" style={styles.center}>
+                  {isSignUp ? 'Three AI models, one conversation. Free to use.' : 'Log in to continue your conversations.'}
+                </Txt>
               </Animated.View>
-            ) : null}
 
-            <Animated.View layout={LinearTransition.springify().damping(20)} style={styles.fields}>
-              <TextField
-                ref={emailRef}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="Email address"
-                autoCapitalize="none"
-                autoComplete="email"
-                keyboardType="email-address"
-                textContentType="emailAddress"
-                returnKeyType="next"
-                onSubmitEditing={() => passwordRef.current?.focus()}
-                accessibilityLabel="Email address"
-              />
-              <TextField
-                ref={passwordRef}
-                value={password}
-                onChangeText={setPassword}
-                placeholder={isSignUp ? 'Password (8+ characters)' : 'Password'}
-                secure
-                autoComplete={isSignUp ? 'new-password' : 'current-password'}
-                textContentType={isSignUp ? 'newPassword' : 'password'}
-                returnKeyType="go"
-                onSubmitEditing={submit}
-                accessibilityLabel="Password"
-              />
-
-              {error ? (
-                <Animated.View
-                  entering={FadeIn.duration(180)}
-                  style={[styles.error, { backgroundColor: colors.dangerSoft }]}
-                  accessibilityRole="alert"
-                >
-                  <Txt variant="callout" tone="danger">
-                    {error}
-                  </Txt>
+              {isSignUp ? (
+                <Animated.View entering={FadeIn.duration(220)} exiting={FadeOut.duration(120)}>
+                  <TextField
+                    label="Full name"
+                    value={fullName}
+                    onChangeText={setFullName}
+                    placeholder="Ada Lovelace"
+                    autoComplete="name"
+                    textContentType="name"
+                    returnKeyType="next"
+                    onSubmitEditing={() => emailRef.current?.focus()}
+                    size="lg"
+                  />
                 </Animated.View>
               ) : null}
 
-              <Button label="Continue" size="lg" fullWidth loading={busy} disabled={!canSubmit} onPress={submit} />
-            </Animated.View>
+              <Animated.View layout={LinearTransition.springify().damping(20)} style={styles.fields}>
+                <TextField
+                  ref={emailRef}
+                  label="Email"
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="you@example.com"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  keyboardType="email-address"
+                  textContentType="emailAddress"
+                  returnKeyType="next"
+                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  size="lg"
+                />
+                <TextField
+                  ref={passwordRef}
+                  label="Password"
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder={isSignUp ? 'At least 8 characters' : '••••••••'}
+                  secure
+                  autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                  textContentType={isSignUp ? 'newPassword' : 'password'}
+                  returnKeyType="go"
+                  onSubmitEditing={submit}
+                  size="lg"
+                />
+
+                {error ? (
+                  <Animated.View entering={FadeIn.duration(180)}>
+                    <Alert>{error}</Alert>
+                  </Animated.View>
+                ) : null}
+
+                <Button
+                  label={isSignUp ? 'Create account' : 'Log in'}
+                  size="lg"
+                  fullWidth
+                  loading={busy}
+                  disabled={!canSubmit}
+                  onPress={submit}
+                  style={styles.submit}
+                />
+              </Animated.View>
+            </Card>
 
             <View style={styles.switchRow}>
               <Txt variant="callout" tone="secondary">
                 {isSignUp ? 'Already have an account?' : 'Don’t have an account?'}
               </Txt>
               <Pressable onPress={switchMode} hitSlop={8} accessibilityRole="button">
-                <Txt variant="calloutMedium" tone="accent">
+                <Txt variant="calloutMedium" style={styles.switchLink}>
                   {isSignUp ? 'Log in' : 'Sign up'}
                 </Txt>
               </Pressable>
@@ -144,14 +155,17 @@ export default function SignInScreen() {
 }
 
 const useStyles = makeStyles((c) => ({
-  safe: { flex: 1, backgroundColor: c.bg },
+  safe: { flex: 1, backgroundColor: c.background },
   flex: { flex: 1 },
-  scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 32 },
-  column: { width: '100%', maxWidth: 380, alignSelf: 'center', gap: 16 },
-  logo: { alignItems: 'center', marginBottom: 8 },
-  heading: { gap: 8, marginBottom: 12 },
+  scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 32 },
+  column: { gap: 20 },
+  brand: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  brandName: { fontFamily: fonts.semibold, fontSize: 18, lineHeight: 24, letterSpacing: -0.36, color: c.foreground },
+  card: { padding: 20, gap: 20 },
+  heading: { gap: 6 },
   center: { textAlign: 'center' },
-  fields: { gap: 14 },
-  error: { borderRadius: radius.md, paddingHorizontal: 14, paddingVertical: 11 },
-  switchRow: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 8 },
+  fields: { gap: 16 },
+  submit: { marginTop: 4 },
+  switchRow: { flexDirection: 'row', justifyContent: 'center', gap: 6 },
+  switchLink: { textDecorationLine: 'underline', color: c.foreground },
 }));

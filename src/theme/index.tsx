@@ -11,7 +11,7 @@ export interface Theme {
   colors: Palette;
 }
 
-const ThemeContext = createContext<Theme>({ scheme: 'light', colors: palettes.light });
+const ThemeContext = createContext<Theme>({ scheme: 'dark', colors: palettes.dark });
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const system = useColorScheme();

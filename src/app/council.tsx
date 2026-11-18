@@ -1,13 +1,13 @@
 import { ChevronDown, Gauge, RefreshCw, Snowflake } from 'lucide-react-native';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown, useAnimatedStyle, useDerivedValue, withSpring, withTiming } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { FadeIn, FadeInDown, useAnimatedStyle, useDerivedValue, withSpring } from 'react-native-reanimated';
 
 import { ProviderLogo } from '@/components/brand';
+import { AppHeader, BackButton, Screen } from '@/components/shell';
 import { Button, IconButton } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/feedback';
-import { Card, Divider, ScreenHeader, SectionHeader } from '@/components/ui/layout';
+import { Progress, Skeleton } from '@/components/ui/feedback';
+import { Badge, Card, CardHeader, Divider, SectionHeader } from '@/components/ui/layout';
 import { Headline, Label, Txt } from '@/components/ui/text';
 import { api } from '@/lib/api';
 import { formatLatency, pad2, relativeTime } from '@/lib/format';
@@ -22,28 +22,27 @@ function QuotaCard({ status }: { status: CouncilStatus }) {
   const { colors } = useTheme();
   const { remaining, limit, configuredKeys, healthyKeys } = status.quota;
   const ratio = remaining !== null && limit ? Math.min(1, remaining / limit) : 0;
-  const fill = useDerivedValue(() => withTiming(ratio, { duration: 700 }), [ratio]);
-  const barStyle = useAnimatedStyle(() => ({ width: `${fill.get() * 100}%` }));
-  const tone = remaining === 0 ? colors.danger : ratio < 0.2 ? colors.warning : colors.accent;
+  const tone = remaining === 0 ? colors.destructive : ratio < 0.2 ? colors.warning : colors.foreground;
 
   return (
     <Card style={styles.gap}>
-      <Label>Free requests left today</Label>
-      <View style={styles.quotaRow}>
-        <Txt variant="display">{remaining ?? '—'}</Txt>
-        {limit ? (
-          <Txt variant="headline" tone="tertiary">
-            / {limit}
+      <View style={styles.quotaTop}>
+        <View style={styles.flex}>
+          <Txt variant="headline">Free requests left today</Txt>
+          <Txt variant="callout" tone="secondary">
+            Quotas reset at 00:00 UTC.
           </Txt>
-        ) : null}
+        </View>
+        <Txt variant="mono" style={styles.quotaCount}>
+          {remaining ?? '—'}
+          {limit ? ` / ${limit}` : ''}
+        </Txt>
       </View>
-      <View style={[styles.track, { backgroundColor: colors.surfaceSunken }]}>
-        <Animated.View style={[styles.fill, { backgroundColor: tone }, barStyle]} />
-      </View>
+      <Progress value={ratio} color={tone} />
       <Txt variant="caption" tone="secondary">
         {configuredKeys === 0
           ? 'No OpenRouter key is configured — every seat answers through the keyless fallback tier.'
-          : `${healthyKeys} of ${configuredKeys} OpenRouter ${configuredKeys === 1 ? 'key' : 'keys'} healthy · quotas reset at 00:00 UTC. When all are spent, seats fall back to the keyless tier.`}
+          : `${healthyKeys} of ${configuredKeys} OpenRouter ${configuredKeys === 1 ? 'key' : 'keys'} healthy. When all are spent, seats fall back to the keyless tier.`}
       </Txt>
     </Card>
   );
@@ -61,27 +60,23 @@ function SeatStatusCard({ seat, index }: { seat: SeatModelStatus; index: number 
     <Animated.View entering={FadeInDown.delay(80 + index * 70).springify().damping(20)}>
       <Card padded={false}>
         <View style={styles.seatHeader}>
-          <Txt variant="mono" tone="tertiary">
-            {pad2(index + 1)}
-          </Txt>
           <ProviderLogo provider={def?.providerKey} size={36} />
           <View style={styles.flex}>
-            <Txt variant="bodyMedium">{seat.agentName}</Txt>
-            <Txt variant="caption" tone="tertiary">
+            <View style={styles.seatName}>
+              <Txt variant="mono" tone="tertiary">
+                {pad2(index + 1)}
+              </Txt>
+              <Txt variant="bodyMedium">{seat.agentName}</Txt>
+            </View>
+            <Txt variant="caption" tone="secondary">
               {def?.persona} · {seat.provider}
             </Txt>
           </View>
-          <View
-            style={[
-              styles.pill,
-              { backgroundColor: seat.isAvailable ? colors.successSoft : colors.warningSoft },
-            ]}
-          >
-            <View style={[styles.dot, { backgroundColor: seat.isAvailable ? colors.success : colors.warning }]} />
-            <Txt variant="label" tone={seat.isAvailable ? 'success' : 'warning'}>
-              {seat.isAvailable ? 'READY' : 'COOLING'}
-            </Txt>
-          </View>
+          <Badge
+            label={seat.isAvailable ? 'Ready' : 'Cooling'}
+            variant={seat.isAvailable ? 'success' : 'warning'}
+            dot={seat.isAvailable ? colors.success : colors.warning}
+          />
         </View>
         <Divider />
         <View style={styles.stats}>
@@ -91,12 +86,12 @@ function SeatStatusCard({ seat, index }: { seat: SeatModelStatus; index: number 
         </View>
         <Divider />
         <Pressable onPress={() => setOpen((o) => !o)} style={styles.expand} accessibilityRole="button" accessibilityState={{ expanded: open }}>
-          <Txt variant="caption" tone="secondary" style={styles.flex}>
+          <Txt variant="callout" tone="secondary" style={styles.flex}>
             {seat.fallbackModels.length} fallback models
             {seat.coolingModels.length ? ` · ${seat.coolingModels.length} cooling down` : ''}
           </Txt>
           <Animated.View style={chevron}>
-            <ChevronDown size={15} color={colors.textTertiary} />
+            <ChevronDown size={15} color={colors.mutedForeground} strokeWidth={1.75} />
           </Animated.View>
         </Pressable>
         {open ? (
@@ -136,6 +131,7 @@ function Stat({ label, value, mono }: { label: string; value: string; mono?: boo
 
 export default function CouncilScreen() {
   const styles = useStyles();
+  const { colors } = useTheme();
   const showToast = useAppStore((s) => s.showToast);
   const [status, setStatus] = useState<CouncilStatus | null>(null);
   const [busy, setBusy] = useState<'refresh' | 'verify' | 'probe' | null>('refresh');
@@ -172,11 +168,24 @@ export default function CouncilScreen() {
   }, [showToast]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <ScreenHeader
-        title="Council status"
-        trailing={<IconButton icon={RefreshCw} label="Refresh" onPress={() => load('refresh')} disabled={!!busy} />}
-      />
+    <Screen
+      header={
+        <AppHeader
+          title="Council status"
+          leading={<BackButton />}
+          trailing={
+            <IconButton
+              icon={RefreshCw}
+              label="Refresh"
+              size={40}
+              onPress={() => load('refresh')}
+              disabled={!!busy}
+              color={colors.foreground}
+            />
+          }
+        />
+      }
+    >
       <ScrollView
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={busy === 'refresh' && !!status} onRefresh={() => load('refresh')} />}
@@ -191,19 +200,20 @@ export default function CouncilScreen() {
 
         {!status ? (
           <View style={styles.gap}>
-            <Skeleton height={150} style={{ borderRadius: radius.md }} />
-            <Skeleton height={180} style={{ borderRadius: radius.md }} />
-            <Skeleton height={180} style={{ borderRadius: radius.md }} />
+            <Skeleton height={130} style={{ borderRadius: radius.lg }} />
+            <Skeleton height={180} style={{ borderRadius: radius.lg }} />
+            <Skeleton height={180} style={{ borderRadius: radius.lg }} />
           </View>
         ) : (
           <>
             <Animated.View entering={FadeInDown.delay(40).springify().damping(20)}>
-              <SectionHeader title="Quota" trailing={<Label>{relativeTime(status.checkedAt)}</Label>} />
+              <SectionHeader title="Quota" trailing={<Label>Checked {relativeTime(status.checkedAt)}</Label>} />
               <QuotaCard status={status} />
             </Animated.View>
 
             <View>
-              <SectionHeader title="Seats"
+              <SectionHeader
+                title="Seats"
                 trailing={status.catalogSize ? <Label>{status.catalogSize} models in catalog</Label> : null}
               />
               <View style={styles.gap}>
@@ -213,43 +223,66 @@ export default function CouncilScreen() {
               </View>
             </View>
 
-            <View>
-              <SectionHeader title="Diagnostics" />
-              <Card style={styles.gap}>
-                <Button label="Re-verify catalog" variant="secondary" icon={RefreshCw} fullWidth loading={busy === 'verify'} disabled={!!busy} onPress={() => load('verify')} />
-                <Txt variant="caption" tone="tertiary">
-                  Free. Re-checks every pool against OpenRouter’s live model list and key quotas.
-                </Txt>
-                <Divider />
-                <Button label="Measure latency" variant="secondary" icon={Gauge} fullWidth loading={busy === 'probe'} disabled={!!busy} onPress={() => load('probe')} />
-                <Txt variant="caption" tone="tertiary">
-                  Sends one tiny request to each seat’s primary model — uses up to 3 of today’s free requests.
-                </Txt>
-              </Card>
-            </View>
+            <Card style={styles.diagnostics}>
+              <CardHeader title="Diagnostics" description="Check the catalog and seat health on demand." />
+              <View style={styles.diagRow}>
+                <View style={styles.flex}>
+                  <Txt variant="calloutMedium">Re-verify catalog</Txt>
+                  <Txt variant="caption" tone="secondary">
+                    Free. Re-checks every pool against OpenRouter’s live model list and key quotas.
+                  </Txt>
+                </View>
+                <Button
+                  label="Re-verify"
+                  variant="outline"
+                  size="sm"
+                  icon={RefreshCw}
+                  loading={busy === 'verify'}
+                  disabled={!!busy}
+                  onPress={() => load('verify')}
+                />
+              </View>
+              <Divider />
+              <View style={styles.diagRow}>
+                <View style={styles.flex}>
+                  <Txt variant="calloutMedium">Measure latency</Txt>
+                  <Txt variant="caption" tone="secondary">
+                    Sends one tiny request to each seat’s primary model — uses up to 3 of today’s free requests.
+                  </Txt>
+                </View>
+                <Button
+                  label="Measure"
+                  variant="outline"
+                  size="sm"
+                  icon={Gauge}
+                  loading={busy === 'probe'}
+                  disabled={!!busy}
+                  onPress={() => load('probe')}
+                />
+              </View>
+            </Card>
           </>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const useStyles = makeStyles((c) => ({
-  safe: { flex: 1, backgroundColor: c.bg },
-  scroll: { padding: 20, gap: 28, paddingBottom: 48, width: '100%', maxWidth: 720, alignSelf: 'center' },
-  hero: { gap: 12 },
+  scroll: { padding: 16, gap: 24, paddingBottom: 48 },
+  hero: { gap: 10 },
   gap: { gap: 12 },
-  quotaRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
-  track: { height: 6, borderRadius: 3, overflow: 'hidden' },
-  fill: { height: 6, borderRadius: 3 },
+  quotaTop: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
+  quotaCount: { fontSize: 13 },
   seatHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 24, paddingHorizontal: 9, borderRadius: radius.pill },
-  dot: { width: 6, height: 6, borderRadius: 3 },
+  seatName: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   stats: { flexDirection: 'row' },
-  stat: { flex: 1, gap: 6, padding: 14, borderRightWidth: 1, borderColor: c.border },
+  stat: { flex: 1, gap: 6, paddingVertical: 12, paddingHorizontal: 16, borderRightWidth: 1, borderColor: c.border },
   expand: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
   fallbacks: { paddingHorizontal: 16, paddingBottom: 14, gap: 8 },
   fallback: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   fallbackIndex: { width: 20 },
+  diagnostics: { gap: 16 },
+  diagRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   flex: { flex: 1 },
 }));

@@ -50,8 +50,8 @@ function AppNavigator() {
   const loadThreads = useAppStore((s) => s.loadThreads);
 
   useEffect(() => {
-    SystemUI.setBackgroundColorAsync(colors.bg).catch(() => {});
-  }, [colors.bg]);
+    SystemUI.setBackgroundColorAsync(colors.background).catch(() => {});
+  }, [colors.background]);
 
   useEffect(() => {
     if (!signedIn) return;
@@ -65,7 +65,7 @@ function AppNavigator() {
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: colors.bg },
+          contentStyle: { backgroundColor: colors.background },
           animation: 'slide_from_right',
         }}
       >

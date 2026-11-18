@@ -12,13 +12,13 @@ export default function NotFound() {
     <SafeAreaView style={styles.safe}>
       <View style={styles.body}>
         <Headline muted="Page not found." strong="Let’s get you back to your chats." />
-        <Button label="Go home" onPress={() => router.replace('/')} />
+        <Button label="Back to chats" onPress={() => router.replace('/')} />
       </View>
     </SafeAreaView>
   );
 }
 
 const useStyles = makeStyles((c) => ({
-  safe: { flex: 1, backgroundColor: c.bg },
+  safe: { flex: 1, backgroundColor: c.background },
   body: { flex: 1, justifyContent: 'center', padding: 24, gap: 20, maxWidth: 520, alignSelf: 'center', width: '100%' },
 }));

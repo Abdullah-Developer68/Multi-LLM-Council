@@ -1,21 +1,35 @@
 import { ChevronRight, type LucideIcon } from 'lucide-react-native';
-import { ActivityIndicator, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { fonts, radius, useTheme } from '@/theme';
-import { PressableScale } from './pressable-scale';
+import { haptic } from '@/lib/haptics';
+import { control, fonts, radius, useTheme, type Palette } from '@/theme';
 import { Txt } from './text';
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
+export type ButtonVariant = 'default' | 'outline' | 'secondary' | 'ghost' | 'destructive';
 type Size = 'sm' | 'md' | 'lg';
 
-const HEIGHT: Record<Size, number> = { sm: 32, md: 40, lg: 48 };
-const PAD: Record<Size, number> = { sm: 12, md: 16, lg: 22 };
-const FONT: Record<Size, number> = { sm: 13, md: 14, lg: 15 };
+const PAD: Record<Size, number> = { sm: 12, md: 16, lg: 20 };
+const FONT: Record<Size, number> = { sm: 13, md: 14, lg: 14 };
+
+function variantColors(colors: Palette, variant: ButtonVariant) {
+  switch (variant) {
+    case 'outline':
+      return { bg: colors.card, fg: colors.foreground, border: colors.input };
+    case 'secondary':
+      return { bg: colors.muted, fg: colors.foreground, border: 'transparent' };
+    case 'ghost':
+      return { bg: 'transparent', fg: colors.foreground, border: 'transparent' };
+    case 'destructive':
+      return { bg: colors.destructiveSoft, fg: colors.destructive, border: 'transparent' };
+    default:
+      return { bg: colors.primary, fg: colors.primaryForeground, border: colors.primary };
+  }
+}
 
 export interface ButtonProps {
   label: string;
   onPress?: () => void;
-  variant?: Variant;
+  variant?: ButtonVariant;
   size?: Size;
   icon?: LucideIcon;
   iconRight?: LucideIcon;
@@ -26,11 +40,15 @@ export interface ButtonProps {
   accessibilityLabel?: string;
 }
 
-/** Pill button. `primary` is the near-black action, `secondary` the outlined pill. */
+/**
+ * shadcn button. Pill-shaped like the StudyBot design: `default` is the solid
+ * primary, `outline` sits on a card with an input-coloured border, `ghost` only
+ * shows a fill while pressed.
+ */
 export function Button({
   label,
   onPress,
-  variant = 'primary',
+  variant = 'default',
   size = 'md',
   icon: Icon,
   iconRight: IconRight,
@@ -41,69 +59,74 @@ export function Button({
   accessibilityLabel,
 }: ButtonProps) {
   const { colors } = useTheme();
-  const palette = {
-    primary: { bg: colors.primary, fg: colors.onPrimary, border: colors.primary },
-    secondary: { bg: colors.surface, fg: colors.text, border: colors.borderStrong },
-    ghost: { bg: 'transparent', fg: colors.text, border: 'transparent' },
-    danger: { bg: colors.dangerSoft, fg: colors.danger, border: 'transparent' },
-  }[variant];
-  const iconSize = size === 'lg' ? 18 : 16;
+  const v = variantColors(colors, variant);
+  const inactive = disabled || loading;
 
   return (
-    <PressableScale
-      onPress={onPress}
-      disabled={disabled || loading}
-      haptics
+    <Pressable
+      onPress={() => {
+        haptic.tap();
+        onPress?.();
+      }}
+      disabled={inactive}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
-      accessibilityState={{ disabled: disabled || loading, busy: loading }}
-      style={[
+      accessibilityState={{ disabled: inactive, busy: loading }}
+      style={({ pressed }) => [
         styles.base,
         {
-          height: HEIGHT[size],
+          height: control[size],
           paddingHorizontal: PAD[size],
-          backgroundColor: palette.bg,
-          borderColor: palette.border,
+          backgroundColor: v.bg,
+          borderColor: v.border,
           alignSelf: fullWidth ? 'stretch' : 'flex-start',
         },
+        variant === 'outline' && styles.outlineShadow,
+        pressed && (variant === 'ghost' ? { backgroundColor: colors.muted } : styles.pressed),
+        disabled && !loading && styles.disabled,
         style,
       ]}
     >
       {loading ? (
-        <ActivityIndicator size="small" color={palette.fg} />
+        <ActivityIndicator size="small" color={v.fg} />
       ) : (
-        <View style={styles.row}>
-          {Icon ? <Icon size={iconSize} color={palette.fg} strokeWidth={1.8} /> : null}
-          <Txt style={{ fontFamily: fonts.medium, fontSize: FONT[size], lineHeight: FONT[size] + 4 }} color={palette.fg}>
+        <View style={[styles.row, size === 'sm' && styles.rowSm]}>
+          {Icon ? <Icon size={16} color={v.fg} strokeWidth={1.75} /> : null}
+          <Txt style={{ fontFamily: fonts.medium, fontSize: FONT[size], lineHeight: FONT[size] + 4 }} color={v.fg}>
             {label}
           </Txt>
-          {IconRight ? <IconRight size={iconSize} color={palette.fg} strokeWidth={1.8} /> : null}
+          {IconRight ? <IconRight size={16} color={v.fg} strokeWidth={1.75} /> : null}
         </View>
       )}
-    </PressableScale>
+    </Pressable>
   );
 }
 
-/** Blue inline link with a trailing chevron — "Explore council ›". */
+/** Inline link with a trailing chevron. */
 export function LinkButton({ label, onPress, tone = 'accent' }: { label: string; onPress?: () => void; tone?: 'accent' | 'secondary' }) {
   const { colors } = useTheme();
-  const color = tone === 'accent' ? colors.accent : colors.textSecondary;
+  const color = tone === 'accent' ? colors.link : colors.mutedForeground;
   return (
-    <PressableScale onPress={onPress} accessibilityRole="link" style={styles.link} hitSlop={8}>
+    <Pressable onPress={onPress} accessibilityRole="link" style={styles.link} hitSlop={8}>
       <Txt variant="calloutMedium" color={color}>
         {label}
       </Txt>
       <ChevronRight size={15} color={color} strokeWidth={2} />
-    </PressableScale>
+    </Pressable>
   );
 }
 
+/**
+ * Square icon button (`icon-sm` in the design): 32px, radius md. `round`
+ * gives the circular composer variant; `variant` follows Button.
+ */
 export function IconButton({
   icon: Icon,
   onPress,
   label,
-  size = 38,
-  bordered = false,
+  size = control.sm,
+  variant = 'ghost',
+  round = false,
   active = false,
   disabled = false,
   color,
@@ -112,34 +135,42 @@ export function IconButton({
   onPress?: () => void;
   label: string;
   size?: number;
-  bordered?: boolean;
+  variant?: ButtonVariant;
+  round?: boolean;
   active?: boolean;
   disabled?: boolean;
   color?: string;
 }) {
   const { colors } = useTheme();
+  const v = variantColors(colors, variant);
   return (
-    <PressableScale
-      onPress={onPress}
+    <Pressable
+      onPress={() => {
+        haptic.tap();
+        onPress?.();
+      }}
       disabled={disabled}
-      scaleTo={0.9}
-      haptics
       hitSlop={6}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={{
-        width: size,
-        height: size,
-        borderRadius: radius.pill,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: active ? colors.surfaceMuted : bordered ? colors.surface : 'transparent',
-        borderWidth: bordered ? StyleSheet.hairlineWidth * 2 : 0,
-        borderColor: colors.border,
-      }}
+      style={({ pressed }) => [
+        {
+          width: size,
+          height: size,
+          borderRadius: round ? radius.pill : radius.md,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderWidth: variant === 'outline' ? 1 : 0,
+          borderColor: v.border,
+          backgroundColor: active || (pressed && variant === 'ghost') ? colors.muted : v.bg,
+        },
+        variant === 'outline' && styles.outlineShadow,
+        pressed && variant !== 'ghost' && styles.pressed,
+        disabled && styles.disabled,
+      ]}
     >
-      <Icon size={Math.round(size * 0.47)} color={color ?? colors.text} strokeWidth={1.7} />
-    </PressableScale>
+      <Icon size={Math.min(18, Math.round(size * 0.5))} color={color ?? v.fg} strokeWidth={1.75} />
+    </Pressable>
   );
 }
 
@@ -151,5 +182,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  rowSm: { gap: 6 },
+  outlineShadow: { boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.25)' },
+  pressed: { opacity: 0.8 },
+  disabled: { opacity: 0.4 },
   link: { flexDirection: 'row', alignItems: 'center', gap: 2, alignSelf: 'flex-start' },
 });

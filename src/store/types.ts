@@ -89,9 +89,6 @@ export interface Toast {
 export interface UISlice {
   drawerOpen: boolean;
   setDrawerOpen: (open: boolean) => void;
-  /** Wide screens only: the persistent sidebar is hidden. */
-  sidebarCollapsed: boolean;
-  setSidebarCollapsed: (collapsed: boolean) => void;
   toasts: Toast[];
   showToast: (message: string, tone?: Toast['tone']) => void;
   dismissToast: (id: number) => void;
