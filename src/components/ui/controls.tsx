@@ -1,73 +1,71 @@
 import type { LucideIcon } from 'lucide-react-native';
-import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import Animated, {
-  interpolateColor,
-  useAnimatedStyle,
-  useDerivedValue,
-  withSpring,
-} from 'react-native-reanimated';
+import Animated, { interpolateColor, useAnimatedStyle, useDerivedValue, withSpring } from 'react-native-reanimated';
 
 import { haptic } from '@/lib/haptics';
-import { radius, springs, useTheme } from '@/theme';
+import { control, radius, springs, useTheme } from '@/theme';
 import { Txt } from './text';
 
 export interface SegmentOption<T extends string> {
   value: T;
-  label: string;
+  label?: string;
   icon?: LucideIcon;
+  accessibilityLabel?: string;
 }
 
-/** Segmented control with a sliding thumb. */
+/**
+ * Two looks from the design:
+ * - `group` (toggle group): bordered strip split by hairlines, active segment on `muted`.
+ * - `tabs`: a `muted` track whose active segment is a raised `background` pill.
+ */
 export function Segmented<T extends string>({
   options,
   value,
   onChange,
+  variant = 'group',
 }: {
   options: SegmentOption<T>[];
-  value: T;
+  value: T | null;
   onChange: (value: T) => void;
+  variant?: 'group' | 'tabs';
 }) {
   const { colors } = useTheme();
-  const [width, setWidth] = useState(0);
-  const index = Math.max(0, options.findIndex((o) => o.value === value));
-  const segment = width ? (width - 6) / options.length : 0;
-  const x = useDerivedValue(() => withSpring(index * segment, springs.snappy), [index, segment]);
-  const thumbStyle = useAnimatedStyle(() => ({ transform: [{ translateX: x.get() }] }));
-
+  const tabs = variant === 'tabs';
   return (
     <View
-      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-      style={[styles.segmented, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}
+      style={[
+        tabs ? styles.tabs : styles.group,
+        tabs ? { backgroundColor: colors.muted } : { borderColor: colors.input, backgroundColor: colors.card },
+      ]}
       accessibilityRole="tablist"
     >
-      {segment > 0 ? (
-        <Animated.View
-          style={[
-            styles.thumb,
-            { width: segment, backgroundColor: colors.surface, borderColor: colors.border },
-            thumbStyle,
-          ]}
-        />
-      ) : null}
-      {options.map((option) => {
+      {options.map((option, i) => {
         const active = option.value === value;
         const Icon = option.icon;
+        const fg = active ? colors.foreground : colors.mutedForeground;
         return (
           <Pressable
             key={option.value}
-            style={styles.segment}
             onPress={() => {
               if (!active) haptic.select();
               onChange(option.value);
             }}
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
+            accessibilityLabel={option.accessibilityLabel ?? option.label}
+            style={({ pressed }) => [
+              tabs ? styles.tab : styles.item,
+              !tabs && i > 0 && { borderLeftWidth: 1, borderLeftColor: colors.input },
+              active && (tabs ? [styles.tabActive, { backgroundColor: colors.background, borderColor: colors.input }] : { backgroundColor: colors.muted }),
+              pressed && !active && styles.pressed,
+            ]}
           >
-            {Icon ? <Icon size={15} color={active ? colors.text : colors.textSecondary} strokeWidth={1.7} /> : null}
-            <Txt variant="calloutMedium" tone={active ? 'primary' : 'secondary'}>
-              {option.label}
-            </Txt>
+            {Icon ? <Icon size={16} color={fg} strokeWidth={1.75} /> : null}
+            {option.label ? (
+              <Txt variant="calloutMedium" color={fg}>
+                {option.label}
+              </Txt>
+            ) : null}
           </Pressable>
         );
       })}
@@ -75,15 +73,19 @@ export function Segmented<T extends string>({
   );
 }
 
-/** Animated on/off switch. */
+/** shadcn switch: primary track when on, input track when off. */
 export function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label: string }) {
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
   const progress = useDerivedValue(() => withSpring(value ? 1 : 0, springs.snappy), [value]);
   const trackStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(progress.get(), [0, 1], [colors.surfaceSunken, colors.primary]),
+    backgroundColor: interpolateColor(progress.get(), [0, 1], [colors.input, colors.primary]),
   }));
   const knobStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: progress.get() * 18 }],
+    backgroundColor:
+      scheme === 'dark'
+        ? interpolateColor(progress.get(), [0, 1], [colors.foreground, colors.primaryForeground])
+        : colors.card,
   }));
   return (
     <Pressable
@@ -96,36 +98,39 @@ export function Toggle({ value, onChange, label }: { value: boolean; onChange: (
       accessibilityLabel={label}
       accessibilityState={{ checked: value }}
     >
-      <Animated.View style={[styles.track, { borderColor: colors.border }, trackStyle]}>
-        <Animated.View style={[styles.knob, { backgroundColor: value ? colors.onPrimary : colors.surface }, knobStyle]} />
+      <Animated.View style={[styles.track, trackStyle]}>
+        <Animated.View style={[styles.knob, knobStyle]} />
       </Animated.View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  segmented: {
-    flexDirection: 'row',
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    padding: 3,
-  },
-  thumb: {
-    position: 'absolute',
-    top: 3,
-    bottom: 3,
-    left: 3,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-  },
-  segment: {
+  group: { flexDirection: 'row', borderWidth: 1, borderRadius: radius.md, overflow: 'hidden' },
+  item: {
     flex: 1,
-    height: 34,
+    minWidth: 0,
+    height: control.lg - 2,
     flexDirection: 'row',
     gap: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  track: { width: 44, height: 26, borderRadius: 13, padding: 3, borderWidth: 1 },
+  tabs: { flexDirection: 'row', padding: 3, borderRadius: radius.md + 2 },
+  tab: {
+    flex: 1,
+    minWidth: 0,
+    height: control.md,
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  tabActive: { boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.3)' },
+  pressed: { opacity: 0.7 },
+  track: { width: 42, height: 24, borderRadius: 12, padding: 3 },
   knob: { width: 18, height: 18, borderRadius: 9 },
 });

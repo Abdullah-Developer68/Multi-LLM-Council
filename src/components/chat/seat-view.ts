@@ -12,8 +12,6 @@ export interface SeatView {
   tier?: SeatTier;
   rotated?: boolean;
   rotations: number;
-  byName?: string;
-  directive?: string;
 }
 
 export function fromResponse(r: SeatResponse): SeatView {
@@ -27,8 +25,6 @@ export function fromResponse(r: SeatResponse): SeatView {
     tier: r.tier,
     rotated: r.rotated,
     rotations: r.rotated ? Math.max(1, (r.attempts ?? 2) - 1) : 0,
-    byName: r.optimizedByAgentName,
-    directive: r.receivedPrompt,
   };
 }
 
@@ -40,7 +36,5 @@ export function fromLive(s: LiveSeat): SeatView {
     model: s.model,
     text: s.text,
     rotations: s.rotations,
-    byName: s.byName || undefined,
-    directive: s.directive || undefined,
   };
 }

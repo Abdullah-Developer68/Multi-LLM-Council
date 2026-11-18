@@ -10,7 +10,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 
-import type { SeatResponse, TurnSynthesis } from '../../shared/types';
+import type { AttachmentKind, AttachmentMeta, SeatResponse, TurnSynthesis } from '../../shared/types';
 
 /** Legacy directory table kept from v1 (exposed at /api/users). */
 export const users = pgTable('users', {
@@ -56,6 +56,8 @@ export interface TurnMeta {
   preferredAgentId?: string | null;
   synthesis?: TurnSynthesis | null;
   contextTurns?: number;
+  /** Files attached to the user's message. */
+  attachments?: AttachmentMeta[];
 }
 
 export const multiAgentTurns = pgTable(
@@ -93,6 +95,25 @@ export const verifiedFreeModels = pgTable('verified_free_models', {
   verifiedAt: timestamp('verified_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const chatAttachments = pgTable(
+  'chat_attachments',
+  {
+    id: text('id').primaryKey(),
+    accountId: integer('account_id')
+      .notNull()
+      .references(() => appAccounts.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    mimeType: text('mime_type').notNull(),
+    size: integer('size').notNull(),
+    kind: text('kind').$type<AttachmentKind>().notNull(),
+    content: text('content').notNull(),
+    truncated: boolean('truncated').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index('chat_attachments_account_idx').on(t.accountId)],
+);
+
 export type TurnRow = typeof multiAgentTurns.$inferSelect;
 export type ThreadRow = typeof chatThreads.$inferSelect;
 export type VerifiedModelRow = typeof verifiedFreeModels.$inferSelect;
+export type AttachmentRow = typeof chatAttachments.$inferSelect;

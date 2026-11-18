@@ -5,21 +5,23 @@ import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring, wi
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { radius, springs, useTheme } from '@/theme';
+import { elevation, radius, springs, useTheme } from '@/theme';
 import { Txt } from './text';
 
 const OFFSCREEN = 640;
 
-/** Bottom sheet with a spring entrance and drag-down-to-dismiss. */
+/** Bottom sheet (the design's model sheet): spring entrance, drag down to dismiss. */
 export function Sheet({
   visible,
   onClose,
   title,
+  description,
   children,
 }: {
   visible: boolean;
   onClose: () => void;
   title?: string;
+  description?: string;
   children: ReactNode;
 }) {
   const { colors } = useTheme();
@@ -74,15 +76,24 @@ export function Sheet({
           <Animated.View
             style={[
               styles.panel,
-              { backgroundColor: colors.surface, borderColor: colors.border, paddingBottom: insets.bottom + 16 },
+              { backgroundColor: colors.card, borderColor: colors.border, paddingBottom: insets.bottom + 16 },
+              elevation(colors, 2),
               panelStyle,
             ]}
+            accessibilityViewIsModal
           >
-            <View style={[styles.handle, { backgroundColor: colors.borderStrong }]} />
+            <View style={[styles.handle, { backgroundColor: colors.input }]} />
             {title ? (
-              <Txt variant="bodyMedium" style={styles.title} numberOfLines={2}>
-                {title}
-              </Txt>
+              <View style={styles.header}>
+                <Txt variant="title" style={styles.title} numberOfLines={2}>
+                  {title}
+                </Txt>
+                {description ? (
+                  <Txt variant="callout" tone="secondary">
+                    {description}
+                  </Txt>
+                ) : null}
+              </View>
             ) : null}
             {children}
           </Animated.View>
@@ -102,9 +113,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 10,
     width: '100%',
-    maxWidth: 640,
-    alignSelf: 'center',
   },
   handle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 14 },
-  title: { marginBottom: 12, paddingHorizontal: 4 },
+  header: { gap: 4, marginBottom: 14, paddingHorizontal: 2 },
+  title: { fontSize: 17, lineHeight: 23, letterSpacing: -0.3 },
 });

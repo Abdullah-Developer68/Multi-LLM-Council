@@ -3,6 +3,7 @@ import { fetch as expoFetch } from 'expo/fetch';
 import { Platform } from 'react-native';
 
 import type {
+  AttachmentMeta,
   CouncilEvent,
   CouncilStatus,
   CouncilTurn,
@@ -21,7 +22,9 @@ function baseUrl(): string {
   if (override) return override.replace(/\/$/, '');
   if (Platform.OS === 'web') return '';
   const hostUri = Constants.expoConfig?.hostUri;
-  if (hostUri) return `http://${hostUri.split(':')[0]}:8081`;
+  // The dev server serves the API routes too. Keep its exact host and port:
+  // `192.168.x.x:8082` on LAN, or a tunnel host like `abc.exp.direct` (no port).
+  if (hostUri) return `http://${hostUri.replace(/\/+$/, '')}`;
   return 'http://localhost:8081';
 }
 
@@ -110,12 +113,96 @@ export const api = {
   insights: () => request<InsightsSummary>('/api/insights'),
 };
 
+const UPLOAD_TIMEOUT_MS = 90_000;
+
+export interface UploadFileInput {
+  uri: string;
+  name: string;
+  type: string;
+  webFile?: File;
+}
+
+/**
+ * Uploads one file or photo to `POST /api/attachments` using global `fetch`
+ * (so React Native / browsers generate the multipart boundary) with a generous
+ * timeout to allow server-side vision extraction on images.
+ */
+export async function uploadAttachment(
+  file: UploadFileInput,
+  opts: { signal?: AbortSignal; timeoutMs?: number } = {},
+): Promise<AttachmentMeta> {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, opts.timeoutMs ?? UPLOAD_TIMEOUT_MS);
+
+  const onParentAbort = () => controller.abort();
+  if (opts.signal) {
+    if (opts.signal.aborted) {
+      clearTimeout(timeout);
+      throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+    }
+    opts.signal.addEventListener('abort', onParentAbort, { once: true });
+  }
+
+  try {
+    const formData = new FormData();
+    if (Platform.OS === 'web') {
+      if (file.webFile) {
+        formData.append('file', file.webFile, file.name);
+      } else {
+        const blobRes = await fetch(file.uri, { signal: controller.signal });
+        const blob = await blobRes.blob();
+        formData.append('file', blob, file.name);
+      }
+    } else {
+      formData.append('file', { uri: file.uri, name: file.name, type: file.type } as unknown as Blob);
+    }
+
+    const reqHeaders: Record<string, string> = { Accept: 'application/json' };
+    if (authToken) reqHeaders.Authorization = `Bearer ${authToken}`;
+
+    let res: Response;
+    try {
+      res = await fetch(`${baseUrl()}/api/attachments`, {
+        method: 'POST',
+        headers: reqHeaders,
+        body: formData,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (timedOut) {
+        throw new ApiError(408, 'Upload timed out. Please try again.');
+      }
+      if (opts.signal?.aborted || (err as Error)?.name === 'AbortError') {
+        throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+      }
+      throw new ApiError(0, 'Could not reach the server. Check your connection and try again.');
+    }
+
+    const data = (await res.json().catch(() => ({}))) as { attachment?: AttachmentMeta; error?: string };
+    if (!res.ok) {
+      if (res.status === 401 && authToken) onUnauthorized?.();
+      throw new ApiError(res.status, data?.error ?? `Upload failed (${res.status}).`);
+    }
+    if (!data?.attachment) {
+      throw new ApiError(res.status, 'Server returned an invalid attachment response.');
+    }
+    return data.attachment;
+  } finally {
+    clearTimeout(timeout);
+    opts.signal?.removeEventListener('abort', onParentAbort);
+  }
+}
+
 /**
  * Starts a council turn and calls `onEvent` for every NDJSON event as it
  * streams in. Uses `expo/fetch`, which supports streamed bodies on native.
  */
 export async function streamCouncil(
-  body: { prompt: string; threadId?: string; useContext: boolean },
+  body: { prompt: string; threadId?: string; useContext: boolean; attachmentIds?: string[] },
   opts: { signal: AbortSignal; onEvent: (event: CouncilEvent) => void },
 ): Promise<void> {
   let res;

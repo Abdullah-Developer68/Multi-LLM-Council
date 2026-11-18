@@ -12,7 +12,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#F7F7F5",
+        "backgroundColor": "#F7F7F7",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -33,12 +33,33 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#F7F7F5",
+          "backgroundColor": "#F7F7F7",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76,
           "dark": {
             "backgroundColor": "#0A0A0A"
           }
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Council uses your camera so you can photograph notes, documents or screens and attach them to a question.",
+          "photosPermission": "Council opens your photo library so you can attach pictures to a question.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Council uses your camera so you can photograph notes, documents or screens and attach them to a question.",
+          "recordAudioAndroid": false
         }
       ]
     ],

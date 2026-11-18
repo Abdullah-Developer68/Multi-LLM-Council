@@ -38,8 +38,16 @@ export interface SeatResponse {
   attempts?: number;
   optimizedByAgentId?: string;
   optimizedByAgentName?: string;
-  /** The directive this seat received from its ring peer. */
+  /** The refined prompt this seat received. */
   receivedPrompt?: string;
+}
+
+export interface TurnRefinement {
+  prompt: string;
+  model: string;
+  latencyMs: number;
+  refined: boolean;
+  error?: string;
 }
 
 export interface TurnSynthesis {
@@ -55,6 +63,9 @@ export interface CouncilTurn {
   userPrompt: string;
   agentResponses: SeatResponse[];
   preferredAgentId: string | null;
+  refinement: TurnRefinement | null;
+  /** Files attached to the user's message (empty for older turns). */
+  attachments: AttachmentMeta[];
   synthesis: TurnSynthesis | null;
   elapsedMs: number | null;
   /** How many earlier turns were fed to the council as context. */
@@ -62,10 +73,40 @@ export interface CouncilTurn {
   createdAt: string;
 }
 
+/** What kind of file an attachment is; drives the icon and how its contents are read. */
+export type AttachmentKind = 'image' | 'pdf' | 'document' | 'presentation' | 'spreadsheet' | 'text';
+
+/**
+ * A file the user attached to a message. Uploaded with `POST /api/attachments`
+ * (multipart, field `file`), which extracts its text (or, for images, a vision
+ * model's description + OCR) and returns this metadata. The extracted text
+ * stays on the server; a council turn references attachments by `id`.
+ */
+export interface AttachmentMeta {
+  id: string;
+  name: string;
+  mimeType: string;
+  /** Bytes of the original upload. */
+  size: number;
+  kind: AttachmentKind;
+  /** Characters of extracted text the models will see. */
+  chars: number;
+  /** True when the extracted text was cut to fit the model context. */
+  truncated: boolean;
+}
+
+/** Upload limits shared by client checks and server validation. */
+export const ATTACHMENT_LIMITS = {
+  maxFiles: 5,
+  maxBytes: 15 * 1024 * 1024,
+} as const;
+
 /** Events streamed (as NDJSON) from `POST /api/council`. */
 export type CouncilEvent =
   | { type: 'thread'; threadId: string; title: string; created: boolean }
-  | { type: 'seat:start'; seatId: string; model: string; byId: string; byName: string; directive: string }
+  | { type: 'refine:start'; model: string }
+  | { type: 'refine:done'; refinement: TurnRefinement }
+  | { type: 'seat:start'; seatId: string; model: string }
   | { type: 'seat:thinking'; seatId: string }
   | { type: 'seat:rotate'; seatId: string; model: string; reason: string }
   | { type: 'seat:delta'; seatId: string; text: string }

@@ -49,6 +49,20 @@ export const SEAT_POOLS: Record<string, string[]> = {
     'liquid/lfm-2.5-2.6b:free',
     'pollinations/mistral',
   ],
+  'prompt-refiner': [
+    'google/gemma-4-31b-it:free',
+    'cohere/north-mini-code:free',
+    'google/gemma-4-26b-a4b-it:free',
+    'openrouter/free',
+    'pollinations/openai-fast',
+    'pollinations/openai',
+  ],
+  vision: [
+    'nvidia/nemotron-3.5-super-vl:free',
+    'google/gemma-4-31b-it:free',
+    'google/gemma-4-26b-a4b-it:free',
+    'pollinations/openai',
+  ],
 };
 
 export function seatPool(seatId: string): string[] {

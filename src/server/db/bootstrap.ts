@@ -62,6 +62,18 @@ const STATEMENTS = [
     latency_ms integer,
     verified_at timestamptz NOT NULL DEFAULT now()
   )`,
+  `CREATE TABLE IF NOT EXISTS chat_attachments (
+    id text PRIMARY KEY,
+    account_id integer NOT NULL REFERENCES app_accounts(id) ON DELETE CASCADE,
+    name text NOT NULL,
+    mime_type text NOT NULL,
+    size integer NOT NULL,
+    kind text NOT NULL,
+    content text NOT NULL,
+    truncated boolean NOT NULL DEFAULT false,
+    created_at timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS chat_attachments_account_idx ON chat_attachments (account_id)`,
 ];
 
 const g = globalThis as unknown as { __traSchemaReady?: Promise<void> };

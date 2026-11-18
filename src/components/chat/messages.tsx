@@ -1,4 +1,5 @@
 import * as Clipboard from 'expo-clipboard';
+import { Image } from 'expo-image';
 import { Check, ChevronLeft, ChevronRight, Copy, RefreshCw, Scale, Share2, ThumbsUp, TriangleAlert } from 'lucide-react-native';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Pressable, Share, View } from 'react-native';
@@ -18,52 +19,68 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { ProviderLogo } from '@/components/brand';
-import { formatLatency } from '@/lib/format';
+import { formatBytes, formatLatency, kindLabel } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { useAppStore } from '@/store';
-import type { LiveTurn } from '@/store/types';
+import type { LiveAttachment, LiveTurn } from '@/store/types';
 import { getSeat, SEATS, shortModelName } from '@/shared/council';
-import type { CouncilTurn } from '@/shared/types';
-import { makeStyles, radius, springs, useTheme } from '@/theme';
+import type { AttachmentMeta, CouncilTurn } from '@/shared/types';
+import { fonts, makeStyles, radius, springs, useTheme } from '@/theme';
+import { Badge, IconTile } from '../ui/layout';
 import { Txt } from '../ui/text';
-import { DirectiveInspector } from './directive-inspector';
+import { AttachmentKindIcon } from './attachment-icon';
 import { MarkdownView } from './markdown';
+import { ThinkingIndicator } from './thinking-indicator';
+import { LiveRefinedPrompt, RefinedPrompt } from './refined-prompt';
 import { fromLive, fromResponse, type SeatView } from './seat-view';
 
 /* User message ------------------------------------------------------------- */
 
-export function UserMessage({ text }: { text: string }) {
+type DisplayAttachment = AttachmentMeta | LiveAttachment;
+
+export function UserMessage({ text, attachments }: { text: string; attachments?: DisplayAttachment[] }) {
   const styles = useStyles();
+  const { colors } = useTheme();
+  const list = attachments ?? [];
+
   return (
     <Animated.View entering={FadeInDown.springify().damping(22)} style={styles.userRow}>
+      {list.length > 0 ? (
+        <View style={styles.userAttachments}>
+          {list.map((att) => {
+            const uri = 'uri' in att ? att.uri : undefined;
+            if (att.kind === 'image' && uri) {
+              return (
+                <View key={att.id} style={styles.userThumbWrap}>
+                  <Image source={{ uri }} style={styles.userThumb} contentFit="cover" />
+                </View>
+              );
+            }
+            const displayName = att.kind === 'image' ? 'Photo' : att.name;
+            const caption = `${kindLabel(att.kind)} · ${formatBytes(att.size)}${att.truncated ? ' · trimmed' : ''}`;
+            return (
+              <View key={att.id} style={styles.userChip}>
+                <IconTile size={32}>
+                  <AttachmentKindIcon kind={att.kind} size={16} color={colors.foreground} strokeWidth={1.75} />
+                </IconTile>
+                <View style={styles.userChipText}>
+                  <Txt variant="calloutMedium" numberOfLines={1}>
+                    {displayName}
+                  </Txt>
+                  <Txt variant="caption" tone="secondary" numberOfLines={1}>
+                    {caption}
+                  </Txt>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
       <View style={styles.userBubble}>
         <Txt variant="message" selectable>
           {text}
         </Txt>
       </View>
-    </Animated.View>
-  );
-}
-
-/* Thinking indicator ------------------------------------------------------- */
-
-export function ThinkingIndicator({ label }: { label: string }) {
-  const styles = useStyles();
-  const { colors } = useTheme();
-  const pulse = useSharedValue(1);
-  useEffect(() => {
-    pulse.set(withRepeat(withSequence(withTiming(0.55, { duration: 650 }), withTiming(1, { duration: 650 })), -1));
-  }, [pulse]);
-  const dot = useAnimatedStyle(() => ({ transform: [{ scale: pulse.get() }] }));
-  const text = useAnimatedStyle(() => ({ opacity: 0.45 + (pulse.get() - 0.55) * 1.1 }));
-  return (
-    <Animated.View entering={FadeIn.duration(200)} style={styles.thinking} accessibilityLabel={label}>
-      <Animated.View style={[styles.thinkingDot, { backgroundColor: colors.text }, dot]} />
-      <Animated.View style={text}>
-        <Txt variant="callout" tone="secondary">
-          {label}
-        </Txt>
-      </Animated.View>
     </Animated.View>
   );
 }
@@ -78,8 +95,8 @@ function StatusDot({ view }: { view: SeatView }) {
     pulse.set(live ? withRepeat(withSequence(withTiming(0.3, { duration: 550 }), withTiming(1, { duration: 550 })), -1) : withTiming(1));
   }, [live, pulse]);
   const style = useAnimatedStyle(() => ({ opacity: pulse.get() }));
-  const color = view.phase === 'error' ? colors.danger : (colors.seats[view.seatId] ?? colors.accent);
-  return <Animated.View style={[{ width: 7, height: 7, borderRadius: 4, backgroundColor: color }, style]} />;
+  const color = view.phase === 'error' ? colors.destructive : (colors.seats[view.seatId] ?? colors.foreground);
+  return <Animated.View style={[{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }, style]} />;
 }
 
 function SeatChip({ view, active, onPress }: { view: SeatView; active: boolean; onPress: () => void }) {
@@ -88,14 +105,14 @@ function SeatChip({ view, active, onPress }: { view: SeatView; active: boolean; 
   const seat = getSeat(view.seatId);
   const progress = useDerivedValue(() => withTiming(active ? 1 : 0, { duration: 180 }), [active]);
   const chipStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(progress.get(), [0, 1], [colors.bg, colors.bubble]),
-    borderColor: interpolateColor(progress.get(), [0, 1], [colors.border, colors.bubble]),
+    backgroundColor: interpolateColor(progress.get(), [0, 1], [colors.card, colors.muted]),
+    borderColor: interpolateColor(progress.get(), [0, 1], [colors.border, colors.input]),
   }));
   return (
     <Pressable onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: active }} accessibilityLabel={seat?.name}>
       <Animated.View style={[styles.chip, chipStyle]}>
         <StatusDot view={view} />
-        <Txt variant="calloutMedium" tone={active ? 'primary' : 'secondary'} numberOfLines={1}>
+        <Txt variant="label" tone={active ? 'primary' : 'secondary'} numberOfLines={1} style={styles.chipText}>
           {seat?.shortName ?? view.seatId}
         </Txt>
       </Animated.View>
@@ -113,7 +130,7 @@ function ActionButton({ label, onPress, children }: { label: string; onPress: ()
       hitSlop={6}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [styles.action, (pressed || hovered) && styles.actionActive]}
+      style={({ pressed }) => [styles.action, pressed && styles.actionActive]}
     >
       {children}
     </Pressable>
@@ -228,10 +245,9 @@ function AssistantMessage({
       <GestureDetector gesture={pan}>
         <Animated.View style={dragStyle}>
           <View>
-            {view.byName && view.directive ? <DirectiveInspector byName={view.byName} directive={view.directive} /> : null}
             {view.phase === 'error' ? (
-              <View style={[styles.error, { backgroundColor: colors.dangerSoft }]}>
-                <TriangleAlert size={16} color={colors.danger} strokeWidth={1.8} />
+              <View style={[styles.error, { backgroundColor: colors.destructiveSoft }]}>
+                <TriangleAlert size={16} color={colors.destructive} strokeWidth={1.75} style={styles.errorIcon} />
                 <Txt variant="callout" tone="danger" style={styles.flex}>
                   {view.error || `${seat?.name ?? 'This model'} could not answer.`}
                 </Txt>
@@ -253,16 +269,16 @@ function AssistantMessage({
                 {copied ? (
                   <Check size={16} color={colors.success} strokeWidth={2} />
                 ) : (
-                  <Copy size={16} color={colors.textSecondary} strokeWidth={1.8} />
+                  <Copy size={16} color={colors.mutedForeground} strokeWidth={1.75} />
                 )}
               </ActionButton>
               {turn ? (
                 <ActionButton label={preferred ? 'Remove preference' : 'Prefer this answer'} onPress={() => vote(turn.turnId, view.seatId)}>
                   <ThumbsUp
                     size={16}
-                    color={preferred ? colors.text : colors.textSecondary}
-                    fill={preferred ? colors.text : 'transparent'}
-                    strokeWidth={1.8}
+                    color={preferred ? colors.foreground : colors.mutedForeground}
+                    fill={preferred ? colors.foreground : 'transparent'}
+                    strokeWidth={1.75}
                   />
                 </ActionButton>
               ) : null}
@@ -270,26 +286,26 @@ function AssistantMessage({
                 label="Share"
                 onPress={() => Share.share({ message: view.text }).catch(() => showToast('Sharing is not available here.'))}
               >
-                <Share2 size={16} color={colors.textSecondary} strokeWidth={1.8} />
+                <Share2 size={16} color={colors.mutedForeground} strokeWidth={1.75} />
               </ActionButton>
             </>
           ) : null}
 
           <View style={styles.pager}>
             <ActionButton label="Previous model" onPress={() => go(index - 1)}>
-              <ChevronLeft size={16} color={colors.textSecondary} strokeWidth={2} />
+              <ChevronLeft size={16} color={colors.mutedForeground} strokeWidth={2} />
             </ActionButton>
-            <Txt variant="caption" tone="secondary">
+            <Txt variant="mono" tone="secondary">
               {index + 1}/{n}
             </Txt>
             <ActionButton label="Next model" onPress={() => go(index + 1)}>
-              <ChevronRight size={16} color={colors.textSecondary} strokeWidth={2} />
+              <ChevronRight size={16} color={colors.mutedForeground} strokeWidth={2} />
             </ActionButton>
           </View>
 
           <View style={styles.meta}>
             <ProviderLogo model={view.model} provider={view.rotations ? undefined : seat?.providerKey} size={18} />
-            <Txt variant="caption" tone="tertiary" numberOfLines={1} style={styles.flexShrink}>
+            <Txt variant="label" tone="secondary" numberOfLines={1} style={[styles.flexShrink, styles.metaText]}>
               {shortModelName(view.model)}
               {view.latencyMs ? ` · ${formatLatency(view.latencyMs)}` : ''}
               {view.rotated ? ' · backup' : ''}
@@ -325,9 +341,11 @@ function Consensus({ turn }: { turn: CouncilTurn }) {
         style={({ pressed }) => [styles.consensusButton, pressed && styles.actionActive]}
         accessibilityRole="button"
       >
-        <Scale size={15} color={colors.text} strokeWidth={1.8} />
-        <Txt variant="calloutMedium">Build consensus</Txt>
-        <Txt variant="caption" tone="tertiary">
+        <Scale size={15} color={colors.foreground} strokeWidth={1.75} />
+        <Txt variant="calloutMedium" style={styles.consensusLabel}>
+          Build consensus
+        </Txt>
+        <Txt variant="caption" tone="secondary">
           merge all {answered} answers
         </Txt>
       </Pressable>
@@ -337,14 +355,19 @@ function Consensus({ turn }: { turn: CouncilTurn }) {
   const synthesis = turn.synthesis;
   return (
     <Animated.View entering={FadeInDown.springify().damping(22)} style={styles.consensus}>
-      <View style={styles.consensusHeader}>
-        <Scale size={15} color={colors.text} strokeWidth={1.8} />
+      <View style={[styles.consensusHeader, { borderBottomColor: colors.border }]}>
+        <View style={[styles.consensusIcon, { backgroundColor: colors.muted }]}>
+          <Scale size={14} color={colors.foreground} strokeWidth={1.75} />
+        </View>
         <Txt variant="calloutMedium" style={styles.flex}>
           Council consensus
         </Txt>
+        <Badge label={`${answered} answers merged`} variant="secondary" />
       </View>
-      <MarkdownView>{synthesis.text}</MarkdownView>
-      <View style={styles.actions}>
+      <View style={styles.consensusBody}>
+        <MarkdownView>{synthesis.text}</MarkdownView>
+      </View>
+      <View style={[styles.actions, styles.consensusActions]}>
         <ActionButton
           label="Copy consensus"
           onPress={async () => {
@@ -353,12 +376,12 @@ function Consensus({ turn }: { turn: CouncilTurn }) {
             showToast('Consensus copied');
           }}
         >
-          <Copy size={16} color={colors.textSecondary} strokeWidth={1.8} />
+          <Copy size={16} color={colors.mutedForeground} strokeWidth={1.75} />
         </ActionButton>
         <ActionButton label="Rebuild consensus" onPress={() => synthesize(turn.turnId)}>
-          <RefreshCw size={16} color={colors.textSecondary} strokeWidth={1.8} />
+          <RefreshCw size={16} color={colors.mutedForeground} strokeWidth={1.75} />
         </ActionButton>
-        <Txt variant="caption" tone="tertiary" style={styles.consensusMeta}>
+        <Txt variant="label" tone="secondary" style={styles.consensusMeta}>
           {shortModelName(synthesis.model)} · {formatLatency(synthesis.latencyMs)}
         </Txt>
       </View>
@@ -372,7 +395,8 @@ export function TurnView({ turn }: { turn: CouncilTurn }) {
   const styles = useStyles();
   return (
     <View style={styles.turn}>
-      <UserMessage text={turn.userPrompt} />
+      <UserMessage text={turn.userPrompt} attachments={turn.attachments} />
+      {turn.refinement ? <RefinedPrompt refinement={turn.refinement} /> : null}
       <AssistantMessage views={turn.agentResponses.map(fromResponse)} selectionKey={turn.turnId} turn={turn} />
       <Consensus turn={turn} />
     </View>
@@ -383,60 +407,112 @@ export function LiveTurnView({ live }: { live: LiveTurn }) {
   const styles = useStyles();
   return (
     <View style={styles.turn}>
-      <UserMessage text={live.prompt} />
-      <AssistantMessage views={Object.values(live.seats).map(fromLive)} selectionKey="live" />
+      <UserMessage text={live.prompt} attachments={live.attachments} />
+      <LiveRefinedPrompt refinement={live.refinement} />
+      {live.refinement.status === 'done' ? (
+        <AssistantMessage views={Object.values(live.seats).map(fromLive)} selectionKey="live" />
+      ) : null}
     </View>
   );
 }
 
 const useStyles = makeStyles((c) => ({
-  turn: { gap: 18, marginBottom: 36 },
+  turn: { gap: 16, marginBottom: 32 },
   userRow: { alignItems: 'flex-end' },
-  userBubble: {
-    maxWidth: '82%',
-    backgroundColor: c.bubble,
-    borderRadius: 22,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
+  userAttachments: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: 6,
+    maxWidth: '85%',
+    marginBottom: 8,
   },
-  assistant: { gap: 10 },
-  chips: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  userThumbWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: c.border,
+    backgroundColor: c.muted,
+  },
+  userThumb: { width: 64, height: 64 },
+  userChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: c.border,
+    borderRadius: radius.md,
+    backgroundColor: c.card,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    maxWidth: 240,
+  },
+  userChipText: { flexShrink: 1, gap: 1 },
+  userBubble: {
+    maxWidth: '85%',
+    backgroundColor: c.muted,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    borderBottomLeftRadius: 14,
+    borderBottomRightRadius: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  assistant: { gap: 12 },
+  chips: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
-    height: 32,
-    paddingHorizontal: 12,
-    borderRadius: radius.pill,
+    height: 28,
+    paddingHorizontal: 10,
+    borderRadius: radius.md,
     borderWidth: 1,
   },
-  thinking: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
-  thinkingDot: { width: 11, height: 11, borderRadius: 6 },
+  chipText: { fontSize: 12.5 },
   error: { flexDirection: 'row', gap: 10, padding: 12, borderRadius: radius.md },
+  errorIcon: { marginTop: 2 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 2, marginLeft: -6 },
-  action: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  actionActive: { backgroundColor: c.hover },
-  pager: { flexDirection: 'row', alignItems: 'center', marginLeft: 4 },
+  action: { width: 36, height: 36, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  actionActive: { backgroundColor: c.muted },
+  pager: { flexDirection: 'row', alignItems: 'center', marginLeft: 2 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 8, flexShrink: 1 },
+  metaText: { fontFamily: fonts.regular },
   consensusButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     alignSelf: 'flex-start',
-    height: 38,
-    paddingHorizontal: 14,
+    height: 32,
+    paddingHorizontal: 12,
     borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: c.border,
+    borderColor: c.input,
+    backgroundColor: c.card,
+    boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.25)',
   },
+  consensusLabel: { fontSize: 13 },
   consensus: {
-    borderLeftWidth: 2,
-    borderColor: c.borderStrong,
-    paddingLeft: 14,
-    gap: 6,
+    borderWidth: 1,
+    borderColor: c.border,
+    borderRadius: radius.lg,
+    backgroundColor: c.card,
+    overflow: 'hidden',
   },
-  consensusHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
-  consensusMeta: { marginLeft: 6 },
+  consensusHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  consensusIcon: { width: 26, height: 26, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  consensusBody: { paddingHorizontal: 16, paddingTop: 14 },
+  consensusActions: { marginLeft: 0, paddingHorizontal: 10, paddingBottom: 8 },
+  consensusMeta: { marginLeft: 6, fontFamily: fonts.regular },
   flex: { flex: 1 },
   flexShrink: { flexShrink: 1 },
 }));

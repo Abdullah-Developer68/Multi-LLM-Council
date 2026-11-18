@@ -29,11 +29,11 @@ function ActionRow({
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.surfaceMuted }]}
+      style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.muted }]}
       accessibilityRole="button"
     >
-      <Icon size={18} color={danger ? colors.danger : colors.text} strokeWidth={1.7} />
-      <Txt variant="body" tone={danger ? 'danger' : 'primary'}>
+      <Icon size={16} color={danger ? colors.destructive : colors.mutedForeground} strokeWidth={1.75} />
+      <Txt variant="body" tone={danger ? 'danger' : 'primary'} style={styles.label}>
         {label}
       </Txt>
     </Pressable>
@@ -42,6 +42,7 @@ function ActionRow({
 
 /** Rename / pin / delete for one conversation. */
 export function ThreadActions({ thread, onClose }: { thread: ThreadSummary | null; onClose: () => void }) {
+  const { colors } = useTheme();
   const renameThread = useAppStore((s) => s.renameThread);
   const togglePin = useAppStore((s) => s.togglePin);
   const deleteThread = useAppStore((s) => s.deleteThread);
@@ -59,7 +60,11 @@ export function ThreadActions({ thread, onClose }: { thread: ThreadSummary | nul
   const close = () => onClose();
 
   return (
-    <Sheet visible={!!thread} onClose={close} title={thread?.title}>
+    <Sheet
+      visible={!!thread}
+      onClose={close}
+      title={step === 'rename' ? 'Rename chat' : step === 'delete' ? 'Delete this chat?' : thread?.title}
+    >
       {thread && step === 'menu' ? (
         <View>
           <ActionRow icon={Pencil} label="Rename" onPress={() => setStep('rename')} />
@@ -71,7 +76,8 @@ export function ThreadActions({ thread, onClose }: { thread: ThreadSummary | nul
               close();
             }}
           />
-          <ActionRow icon={Trash2} label="Delete" danger onPress={() => setStep('delete')} />
+          <View style={[styles.separator, { backgroundColor: colors.border }]} />
+          <ActionRow icon={Trash2} label="Delete chat" danger onPress={() => setStep('delete')} />
         </View>
       ) : null}
 
@@ -79,7 +85,7 @@ export function ThreadActions({ thread, onClose }: { thread: ThreadSummary | nul
         <Animated.View entering={FadeIn.duration(180)} style={styles.stack}>
           <TextField value={title} onChangeText={setTitle} autoFocus maxLength={120} returnKeyType="done" />
           <View style={styles.buttons}>
-            <Button label="Cancel" variant="secondary" onPress={() => setStep('menu')} />
+            <Button label="Cancel" variant="outline" onPress={() => setStep('menu')} />
             <Button
               label="Save"
               disabled={!title.trim()}
@@ -97,10 +103,10 @@ export function ThreadActions({ thread, onClose }: { thread: ThreadSummary | nul
         <Animated.View entering={FadeIn.duration(180)} style={styles.stack}>
           <Txt tone="secondary">This removes the conversation and every council answer in it. This can’t be undone.</Txt>
           <View style={styles.buttons}>
-            <Button label="Keep it" variant="secondary" onPress={() => setStep('menu')} />
+            <Button label="Keep it" variant="outline" onPress={() => setStep('menu')} />
             <Button
               label="Delete conversation"
-              variant="danger"
+              variant="destructive"
               icon={Trash2}
               onPress={() => {
                 haptic.warn();
@@ -116,7 +122,9 @@ export function ThreadActions({ thread, onClose }: { thread: ThreadSummary | nul
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 8, paddingVertical: 14, borderRadius: radius.sm },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 10, height: 48, borderRadius: radius.md },
+  separator: { height: 1, marginVertical: 4 },
+  label: { fontSize: 15 },
   stack: { gap: 16, paddingTop: 4 },
   buttons: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
 });

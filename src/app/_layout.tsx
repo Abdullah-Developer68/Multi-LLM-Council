@@ -50,8 +50,8 @@ function AppNavigator() {
   const loadThreads = useAppStore((s) => s.loadThreads);
 
   useEffect(() => {
-    SystemUI.setBackgroundColorAsync(colors.bg).catch(() => {});
-  }, [colors.bg]);
+    SystemUI.setBackgroundColorAsync(colors.background).catch(() => {});
+  }, [colors.background]);
 
   useEffect(() => {
     if (!signedIn) return;
@@ -65,7 +65,7 @@ function AppNavigator() {
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: colors.bg },
+          contentStyle: { backgroundColor: colors.background },
           animation: 'slide_from_right',
         }}
       >
@@ -73,7 +73,11 @@ function AppNavigator() {
           <Stack.Screen name="index" options={{ animation: 'fade' }} />
           <Stack.Screen name="settings" />
           <Stack.Screen name="council" />
-          <Stack.Screen name="insights" />
+          <Stack.Screen name="pricing" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen
+            name="camera"
+            options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom', contentStyle: { backgroundColor: '#000' } }}
+          />
         </Stack.Protected>
         <Stack.Protected guard={!signedIn}>
           <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />

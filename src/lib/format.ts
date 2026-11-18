@@ -1,3 +1,5 @@
+import type { AttachmentKind } from '@/shared/types';
+
 export function formatLatency(ms: number | null | undefined): string {
   if (ms === null || ms === undefined) return '—';
   if (ms < 1000) return `${Math.round(ms)}ms`;
@@ -46,4 +48,27 @@ export function initials(name: string | undefined, email?: string): string {
 
 export function pad2(n: number): string {
   return String(n).padStart(2, '0');
+}
+
+export function formatBytes(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined || !Number.isFinite(bytes) || bytes < 0) return '0 B';
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
+  const mb = kb / 1024;
+  if (mb < 1024) return `${mb.toFixed(1)} MB`;
+  return `${(mb / 1024).toFixed(1)} GB`;
+}
+
+const KIND_LABELS: Record<AttachmentKind, string> = {
+  image: 'Image',
+  pdf: 'PDF',
+  document: 'Word',
+  presentation: 'PowerPoint',
+  spreadsheet: 'Excel',
+  text: 'Text',
+};
+
+export function kindLabel(kind: AttachmentKind): string {
+  return KIND_LABELS[kind] ?? 'File';
 }
