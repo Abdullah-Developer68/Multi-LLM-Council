@@ -28,6 +28,7 @@ function check(name, ok, detail = '') {
 
 const email = `smoke+${Date.now()}@example.test`;
 check('health', (await call('GET', '/api/health')).status === 200);
+check('attachments require auth', (await fetch(`${BASE}/api/attachments`, { method: 'POST' })).status === 401);
 
 const signup = await call('POST', '/api/auth/signup', { email, password: 'correct-horse-9', fullName: 'Smoke Test' });
 check('sign up', signup.status === 201 && !!signup.data.token, signup.data.error);

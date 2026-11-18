@@ -2,8 +2,9 @@ import { eq } from 'drizzle-orm';
 
 import { REFINER, SEATS } from '../../shared/council';
 import type { CouncilEvent, CouncilTurn, SeatResponse, UserAccount } from '../../shared/types';
+import { buildAttachmentsBlock, loadOwnedAttachments, toAttachmentMeta } from '../attachments/store';
 import { db } from '../db/client';
-import { chatThreads, multiAgentTurns } from '../db/schema';
+import { chatThreads, multiAgentTurns, type AttachmentRow } from '../db/schema';
 import { listThreadTurns, newId, requireOwnedThread, titleFromPrompt, toCouncilTurn } from '../turns';
 import { seatMessages, summarize, type ContextTurn } from './directives';
 import { refinePrompt } from './refiner';
@@ -16,6 +17,8 @@ export interface CouncilRequest {
   prompt: string;
   threadId?: string;
   useContext: boolean;
+  attachmentIds?: string[];
+  attachments?: AttachmentRow[];
   signal?: AbortSignal;
   emit: (event: CouncilEvent) => void;
 }
@@ -42,6 +45,10 @@ export async function runCouncil(req: CouncilRequest): Promise<CouncilTurn> {
   const started = Date.now();
   const { user, prompt, emit, signal } = req;
 
+  const attachments = req.attachments ?? (await loadOwnedAttachments(user.id, req.attachmentIds));
+  const attachmentMetas = attachments.map(toAttachmentMeta);
+  const attachmentsBlock = buildAttachmentsBlock(attachments);
+
   const existing = req.threadId ? await requireOwnedThread(req.threadId, user.id) : null;
   const threadId = existing?.id ?? newId('thread');
   const title = existing?.title ?? titleFromPrompt(prompt);
@@ -50,7 +57,7 @@ export async function runCouncil(req: CouncilRequest): Promise<CouncilTurn> {
   const context = existing && req.useContext ? await loadContext(existing.id) : [];
 
   emit({ type: 'refine:start', model: await primaryModelFor(REFINER.id) });
-  const refinement = await refinePrompt({ prompt, context, signal });
+  const refinement = await refinePrompt({ prompt, context, attachments, signal });
   emit({ type: 'refine:done', refinement });
 
   const responses = await Promise.all(
@@ -73,7 +80,7 @@ export async function runCouncil(req: CouncilRequest): Promise<CouncilTurn> {
         const result = await runSeat({
           seatId: seat.id,
           seatName: seat.name,
-          messages: seatMessages(seat, refinement.prompt),
+          messages: seatMessages(seat, refinement.prompt, attachmentsBlock),
           signal,
           onEvent: (event) => {
             if (event.type === 'delta') emit({ type: 'seat:delta', seatId: seat.id, text: event.text });
@@ -134,7 +141,13 @@ export async function runCouncil(req: CouncilRequest): Promise<CouncilTurn> {
       consensusSolution: '',
       agentResponses: responses,
       rankedAgentIds: SEATS.map((s) => s.id),
-      meta: { elapsedMs: Date.now() - started, contextTurns: context.length, preferredAgentId: null, synthesis: null },
+      meta: {
+        elapsedMs: Date.now() - started,
+        contextTurns: context.length,
+        preferredAgentId: null,
+        synthesis: null,
+        ...(attachmentMetas.length ? { attachments: attachmentMetas } : {}),
+      },
       createdAt: now,
     })
     .returning();

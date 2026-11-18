@@ -6,6 +6,8 @@
 
 import { REFINER } from '../../shared/council';
 import type { TurnRefinement } from '../../shared/types';
+import { buildAttachmentsPreview } from '../attachments/store';
+import type { AttachmentRow } from '../db/schema';
 import type { ContextTurn } from './directives';
 import { AbortedError, primaryModelFor, runSeat } from './rotation';
 import { loadSkill } from './skills';
@@ -36,11 +38,13 @@ function extractRefinedPrompt(raw: string): string {
 export async function refinePrompt(opts: {
   prompt: string;
   context: ContextTurn[];
+  attachments?: AttachmentRow[];
   signal?: AbortSignal;
 }): Promise<TurnRefinement> {
   const started = Date.now();
   const trimmedPrompt = opts.prompt.trim();
   const contextText = formatContext(opts.context);
+  const attachmentsPreview = opts.attachments?.length ? buildAttachmentsPreview(opts.attachments) : '';
   const fallbackPrompt = contextText ? `${contextText.trim()}\n\n${trimmedPrompt}` : trimmedPrompt;
 
   if (opts.signal?.aborted) {
@@ -54,7 +58,13 @@ export async function refinePrompt(opts: {
   try {
     fallbackModel = await primaryModelFor(REFINER.id);
     const system = loadSkill('prompt-refiner');
-    const user = `${contextText ? `${contextText.trim()}\n\n` : ''}<user_prompt>\n${trimmedPrompt}\n</user_prompt>`;
+    const user = [
+      contextText.trim(),
+      attachmentsPreview,
+      `<user_prompt>\n${trimmedPrompt}\n</user_prompt>`,
+    ]
+      .filter(Boolean)
+      .join('\n\n');
 
     const result = await runSeat({
       seatId: REFINER.id,

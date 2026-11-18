@@ -1,4 +1,5 @@
 import * as Clipboard from 'expo-clipboard';
+import { Image } from 'expo-image';
 import { Check, ChevronLeft, ChevronRight, Copy, RefreshCw, Scale, Share2, ThumbsUp, TriangleAlert } from 'lucide-react-native';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Pressable, Share, View } from 'react-native';
@@ -18,15 +19,16 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { ProviderLogo } from '@/components/brand';
-import { formatLatency } from '@/lib/format';
+import { formatBytes, formatLatency, kindLabel } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
 import { useAppStore } from '@/store';
-import type { LiveTurn } from '@/store/types';
+import type { LiveAttachment, LiveTurn } from '@/store/types';
 import { getSeat, SEATS, shortModelName } from '@/shared/council';
-import type { CouncilTurn } from '@/shared/types';
+import type { AttachmentMeta, CouncilTurn } from '@/shared/types';
 import { fonts, makeStyles, radius, springs, useTheme } from '@/theme';
-import { Badge } from '../ui/layout';
+import { Badge, IconTile } from '../ui/layout';
 import { Txt } from '../ui/text';
+import { AttachmentKindIcon } from './attachment-icon';
 import { MarkdownView } from './markdown';
 import { ThinkingIndicator } from './thinking-indicator';
 import { LiveRefinedPrompt, RefinedPrompt } from './refined-prompt';
@@ -34,10 +36,46 @@ import { fromLive, fromResponse, type SeatView } from './seat-view';
 
 /* User message ------------------------------------------------------------- */
 
-export function UserMessage({ text }: { text: string }) {
+type DisplayAttachment = AttachmentMeta | LiveAttachment;
+
+export function UserMessage({ text, attachments }: { text: string; attachments?: DisplayAttachment[] }) {
   const styles = useStyles();
+  const { colors } = useTheme();
+  const list = attachments ?? [];
+
   return (
     <Animated.View entering={FadeInDown.springify().damping(22)} style={styles.userRow}>
+      {list.length > 0 ? (
+        <View style={styles.userAttachments}>
+          {list.map((att) => {
+            const uri = 'uri' in att ? att.uri : undefined;
+            if (att.kind === 'image' && uri) {
+              return (
+                <View key={att.id} style={styles.userThumbWrap}>
+                  <Image source={{ uri }} style={styles.userThumb} contentFit="cover" />
+                </View>
+              );
+            }
+            const displayName = att.kind === 'image' ? 'Photo' : att.name;
+            const caption = `${kindLabel(att.kind)} · ${formatBytes(att.size)}${att.truncated ? ' · trimmed' : ''}`;
+            return (
+              <View key={att.id} style={styles.userChip}>
+                <IconTile size={32}>
+                  <AttachmentKindIcon kind={att.kind} size={16} color={colors.foreground} strokeWidth={1.75} />
+                </IconTile>
+                <View style={styles.userChipText}>
+                  <Txt variant="calloutMedium" numberOfLines={1}>
+                    {displayName}
+                  </Txt>
+                  <Txt variant="caption" tone="secondary" numberOfLines={1}>
+                    {caption}
+                  </Txt>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
       <View style={styles.userBubble}>
         <Txt variant="message" selectable>
           {text}
@@ -357,7 +395,7 @@ export function TurnView({ turn }: { turn: CouncilTurn }) {
   const styles = useStyles();
   return (
     <View style={styles.turn}>
-      <UserMessage text={turn.userPrompt} />
+      <UserMessage text={turn.userPrompt} attachments={turn.attachments} />
       {turn.refinement ? <RefinedPrompt refinement={turn.refinement} /> : null}
       <AssistantMessage views={turn.agentResponses.map(fromResponse)} selectionKey={turn.turnId} turn={turn} />
       <Consensus turn={turn} />
@@ -369,7 +407,7 @@ export function LiveTurnView({ live }: { live: LiveTurn }) {
   const styles = useStyles();
   return (
     <View style={styles.turn}>
-      <UserMessage text={live.prompt} />
+      <UserMessage text={live.prompt} attachments={live.attachments} />
       <LiveRefinedPrompt refinement={live.refinement} />
       {live.refinement.status === 'done' ? (
         <AssistantMessage views={Object.values(live.seats).map(fromLive)} selectionKey="live" />
@@ -381,6 +419,37 @@ export function LiveTurnView({ live }: { live: LiveTurn }) {
 const useStyles = makeStyles((c) => ({
   turn: { gap: 16, marginBottom: 32 },
   userRow: { alignItems: 'flex-end' },
+  userAttachments: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: 6,
+    maxWidth: '85%',
+    marginBottom: 8,
+  },
+  userThumbWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: c.border,
+    backgroundColor: c.muted,
+  },
+  userThumb: { width: 64, height: 64 },
+  userChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: c.border,
+    borderRadius: radius.md,
+    backgroundColor: c.card,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    maxWidth: 240,
+  },
+  userChipText: { flexShrink: 1, gap: 1 },
   userBubble: {
     maxWidth: '85%',
     backgroundColor: c.muted,

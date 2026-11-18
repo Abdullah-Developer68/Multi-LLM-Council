@@ -11,6 +11,11 @@ Ask once, three models answer. An Expo mobile app (iOS and Android) in which a p
   - The composer card has a memory toggle and a send/stop button.
   - On a new chat, a centered greeting shows suggestion cards.
 - **Drawer.** Open it with the menu button or an edge swipe. It has search, a new-chat button, chats grouped by Pinned / Today / Yesterday / Previous 7 days, and rename, pin and delete (long-press a chat).
+- **Attachments.** Tap **+** in the composer to take a photo, pick from your library, or attach files. You can attach up to 5 per message, 15 MB each.
+  - **Files:** PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), OpenDocument, and text, CSV, JSON or code files are read on the server.
+  - **Photos:** these are shrunk on the phone, then a free vision model transcribes their text and describes them.
+  - **How the models use them:** the three seats get the file contents alongside the refined prompt and ground their answers in them.
+  - **Not supported:** old binary .doc/.ppt/.xls files and scanned PDFs are rejected with a hint.
 - **Three answers per message.** Switch between the models using the chips above the answer, the ‹ 1/3 › pager, or a sideways swipe. Answers stream in live and show a pulsing "thinking" indicator.
 - **Prompt refiner (4th model).** Before the council answers, a refiner model rewrites your prompt with standard prompt-engineering techniques: it clarifies the goal, makes requirements explicit, chains multi-part tasks into steps, adds few-shot format examples when useful, and sets the output format. Its instructions live in a skill file, `src/server/ai/skills/prompt-refiner/SKILL.md`. All three seats receive the same refined prompt, and the "Prompt refined" disclosure shows it. If the refiner fails or takes longer than 25 seconds, your original prompt is sent instead. Each turn costs 4 free requests.
 - **Consensus.** "Build consensus" merges all answers into one inline message with these sections: Verdict, Where the council agrees, Where it differs, Final answer.

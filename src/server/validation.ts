@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { ATTACHMENT_LIMITS } from '../shared/types';
+
 const email = z
   .string()
   .trim()
@@ -29,6 +31,10 @@ export const councilSchema = z.object({
   prompt: z.string().trim().min(1, 'Write a question for the council.').max(8000, 'That prompt is too long.'),
   threadId: z.string().min(1).optional(),
   useContext: z.boolean().optional(),
+  attachmentIds: z
+    .array(z.string().trim().min(1))
+    .max(ATTACHMENT_LIMITS.maxFiles, `You can attach up to ${ATTACHMENT_LIMITS.maxFiles} files.`)
+    .optional(),
 });
 
 export const updateThreadSchema = z

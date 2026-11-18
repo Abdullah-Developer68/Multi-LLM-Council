@@ -57,6 +57,12 @@ export const SEAT_POOLS: Record<string, string[]> = {
     'pollinations/openai-fast',
     'pollinations/openai',
   ],
+  vision: [
+    'nvidia/nemotron-3.5-super-vl:free',
+    'google/gemma-4-31b-it:free',
+    'google/gemma-4-26b-a4b-it:free',
+    'pollinations/openai',
+  ],
 };
 
 export function seatPool(seatId: string): string[] {

@@ -1,12 +1,15 @@
-import { ArrowUp, Layers, Square } from 'lucide-react-native';
+import { ArrowUp, Layers, Plus, Square } from 'lucide-react-native';
 import { useState } from 'react';
-import { Platform, Pressable, TextInput, View, type TextInputKeyPressEvent } from 'react-native';
+import { Keyboard, Platform, Pressable, TextInput, View, type TextInputKeyPressEvent } from 'react-native';
 
 import { haptic } from '@/lib/haptics';
 import { useAppStore } from '@/store';
 import { control, elevation, fonts, makeStyles, radius, useTheme } from '@/theme';
+import { IconButton } from '../ui/button';
 import { Badge } from '../ui/layout';
 import { Txt } from '../ui/text';
+import { AttachSheet } from './attach-sheet';
+import { AttachmentTray } from './attachment-tray';
 
 const MIN_HEIGHT = 44;
 const MAX_HEIGHT = 200;
@@ -56,6 +59,7 @@ export function Composer({ autoFocus = false }: { autoFocus?: boolean }) {
   const { colors } = useTheme();
   const draft = useAppStore((s) => s.draft);
   const setDraft = useAppStore((s) => s.setDraft);
+  const draftAttachments = useAppStore((s) => s.draftAttachments);
   const send = useAppStore((s) => s.send);
   const cancel = useAppStore((s) => s.cancel);
   const live = useAppStore((s) => !!s.live);
@@ -64,11 +68,17 @@ export function Composer({ autoFocus = false }: { autoFocus?: boolean }) {
   const setContextEnabled = useAppStore((s) => s.setContextEnabled);
   const [height, setHeight] = useState(MIN_HEIGHT);
   const [focused, setFocused] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
 
-  const canSend = draft.trim().length > 0 && draft.length <= LIMIT && !live;
+  const hasUploading = draftAttachments.some((a) => a.status === 'uploading');
+  const hasError = draftAttachments.some((a) => a.status === 'error');
+  const hasReady = draftAttachments.some((a) => a.status === 'ready' && a.meta);
+  const canSend =
+    (draft.trim().length > 0 || hasReady) && draft.length <= LIMIT && !live && !hasUploading && !hasError;
+
   const submit = () => {
     if (!canSend) return;
-    void send(draft);
+    void send(draft, { fromComposer: true });
     setHeight(MIN_HEIGHT);
   };
 
@@ -85,6 +95,7 @@ export function Composer({ autoFocus = false }: { autoFocus?: boolean }) {
   return (
     <View style={styles.outer}>
       <View style={[styles.box, { borderColor: focused ? colors.ring : colors.input }, elevation(colors)]}>
+        <AttachmentTray />
         <TextInput
           value={draft}
           onChangeText={setDraft}
@@ -102,7 +113,28 @@ export function Composer({ autoFocus = false }: { autoFocus?: boolean }) {
           style={[styles.input, { height, color: colors.foreground }, Platform.OS === 'web' && styles.webInput]}
           accessibilityLabel="Message"
         />
+        {hasError ? (
+          <Txt variant="caption" tone="danger" style={styles.attachHint}>
+            Remove or retry failed attachments before sending.
+          </Txt>
+        ) : hasUploading ? (
+          <Txt variant="caption" tone="secondary" style={styles.attachHint}>
+            Uploading attachments…
+          </Txt>
+        ) : null}
         <View style={styles.row}>
+          <IconButton
+            icon={Plus}
+            variant="outline"
+            round
+            size={control.sm}
+            label="Add attachment"
+            disabled={live}
+            onPress={() => {
+              Keyboard.dismiss();
+              setAttachOpen(true);
+            }}
+          />
           {inThread ? (
             <Pressable
               onPress={() => {
@@ -133,6 +165,7 @@ export function Composer({ autoFocus = false }: { autoFocus?: boolean }) {
           <SendButton live={live} canSend={canSend} onSend={submit} onStop={cancel} />
         </View>
       </View>
+      <AttachSheet visible={attachOpen} onClose={() => setAttachOpen(false)} />
       {inThread ? null : (
         <Txt variant="label" tone="secondary" style={styles.disclaimer}>
           Council uses free AI models and can make mistakes.
@@ -172,6 +205,7 @@ const useStyles = makeStyles((c) => ({
   },
   toolText: { fontSize: 13 },
   hint: { paddingLeft: 4 },
+  attachHint: { paddingHorizontal: 6, paddingBottom: 2 },
   disclaimer: { textAlign: 'center', fontFamily: fonts.regular },
   flex: { flex: 1 },
 }));

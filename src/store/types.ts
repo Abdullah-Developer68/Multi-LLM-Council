@@ -1,7 +1,7 @@
 import type { StateCreator } from 'zustand';
 
 import type { ThemePreference } from '@/theme/tokens';
-import type { CouncilTurn, SeatResponse, ThreadSummary, UserAccount } from '@/shared/types';
+import type { AttachmentKind, AttachmentMeta, CouncilTurn, SeatResponse, ThreadSummary, UserAccount } from '@/shared/types';
 
 export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -46,6 +46,30 @@ export interface LiveSeat {
   response?: SeatResponse;
 }
 
+export type DraftAttachmentStatus = 'uploading' | 'ready' | 'error';
+
+export interface NewDraftAttachment {
+  name: string;
+  mimeType: string;
+  size: number;
+  kind: AttachmentKind;
+  uri: string;
+  /** Web File reference when picked in the browser. */
+  webFile?: File;
+}
+
+export interface DraftAttachment extends NewDraftAttachment {
+  localId: string;
+  status: DraftAttachmentStatus;
+  meta?: AttachmentMeta;
+  error?: string;
+}
+
+export interface LiveAttachment extends AttachmentMeta {
+  /** Local image URI so live user messages can display the thumbnail while streaming. */
+  uri?: string;
+}
+
 export interface LiveTurn {
   id: string;
   prompt: string;
@@ -53,6 +77,7 @@ export interface LiveTurn {
   originThreadId: string | null;
   title: string | null;
   startedAt: number;
+  attachments: LiveAttachment[];
   refinement: {
     status: 'refining' | 'done';
     model: string;
@@ -68,8 +93,14 @@ export interface ChatSlice {
   turns: CouncilTurn[];
   threadStatus: LoadStatus;
   live: LiveTurn | null;
-  chatError: { message: string; prompt: string } | null;
+  chatError: {
+    message: string;
+    prompt: string;
+    attachmentIds?: string[];
+    attachments?: LiveAttachment[];
+  } | null;
   draft: string;
+  draftAttachments: DraftAttachment[];
   synthesizing: Record<string, boolean>;
   /** Which seat's answer is shown per turn (`live` while streaming); `picked` = chosen by the user. */
   seatSelection: Record<string, { index: number; picked: boolean }>;
@@ -77,7 +108,10 @@ export interface ChatSlice {
   openThread: (id: string) => Promise<void>;
   newChat: () => void;
   setDraft: (text: string) => void;
-  send: (prompt: string) => Promise<void>;
+  addAttachments: (files: NewDraftAttachment[]) => void;
+  removeAttachment: (localId: string) => void;
+  retryAttachment: (localId: string) => void;
+  send: (prompt: string, opts?: { fromComposer?: boolean }) => Promise<void>;
   cancel: () => void;
   dismissError: () => void;
   vote: (turnId: string, seatId: string) => Promise<void>;
