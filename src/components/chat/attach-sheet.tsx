@@ -9,7 +9,11 @@ import { makeStyles } from '@/theme';
 import { ListGroup, ListItem } from '../ui/layout';
 import { Sheet } from '../ui/sheet';
 
-const MODAL_DISMISS_MS = 250;
+/**
+ * Native pickers can't open while the sheet's modal is still on screen. The
+ * sheet animates out for 200 ms and then unmounts its modal, so wait past that.
+ */
+const MODAL_DISMISS_MS = 650;
 
 /** Bottom sheet for picking camera photos, library photos, or documents. */
 export function AttachSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {

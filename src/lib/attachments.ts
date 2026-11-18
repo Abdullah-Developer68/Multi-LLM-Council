@@ -1,3 +1,4 @@
+import * as Device from 'expo-device';
 import * as DocumentPicker from 'expo-document-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
@@ -139,21 +140,35 @@ export async function pickFromCamera(
     return [];
   }
 
+  // Simulators and most emulators have no usable camera.
+  if (!Device.isDevice) {
+    opts.onError("The camera isn't available in a simulator or emulator. Use Photo library or Files instead.");
+    return [];
+  }
+
   const perm = await ImagePicker.requestCameraPermissionsAsync();
   if (!perm.granted) {
     opts.onDenied();
     return [];
   }
 
+  const launch = () => ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 });
   let result: ImagePicker.ImagePickerResult;
   try {
-    result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ['images'],
-      quality: 1,
-    });
-  } catch {
-    opts.onError('Camera is not available on this device.');
-    return [];
+    result = await launch();
+  } catch (first) {
+    // iOS refuses to present the camera while another modal is still on screen
+    // (e.g. the attach sheet finishing its dismissal). Wait and try once more.
+    console.warn('[camera] launch failed, retrying:', first);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    try {
+      result = await launch();
+    } catch (err) {
+      console.warn('[camera] launch failed:', err);
+      const reason = err instanceof Error && err.message ? ` (${err.message})` : '';
+      opts.onError(`Couldn't open the camera${reason}.`);
+      return [];
+    }
   }
   if (result.canceled || !result.assets?.length) return [];
 
