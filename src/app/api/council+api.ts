@@ -1,3 +1,4 @@
+import { resolveChosenModels } from '../../server/ai/catalog';
 import { runCouncil } from '../../server/ai/council';
 import { AbortedError } from '../../server/ai/rotation';
 import { loadOwnedAttachments } from '../../server/attachments/store';
@@ -13,7 +14,10 @@ import type { CouncilEvent } from '../../shared/types';
 export const POST = route(async (request) => {
   const user = await requireUser(request);
   const body = await readBody(request, councilSchema);
-  const attachments = await loadOwnedAttachments(user.id, body.attachmentIds);
+  const [attachments, models] = await Promise.all([
+    loadOwnedAttachments(user.id, body.attachmentIds),
+    resolveChosenModels(body.models),
+  ]);
   const encoder = new TextEncoder();
   const abort = new AbortController();
   request.signal?.addEventListener('abort', () => abort.abort());
@@ -36,6 +40,7 @@ export const POST = route(async (request) => {
           threadId: body.threadId,
           useContext: body.useContext ?? true,
           attachments,
+          models,
           signal: abort.signal,
           emit,
         });

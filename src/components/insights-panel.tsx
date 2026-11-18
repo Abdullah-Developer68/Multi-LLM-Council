@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from 'react-native-reanimated';
 
-import { ProviderLogo } from '@/components/brand';
+import { ProviderLogo } from '@/components/provider-logo';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/feedback';
 import { Card, CardHeader, Divider, SectionHeader } from '@/components/ui/layout';
@@ -177,6 +177,8 @@ export function InsightsPanel({
           {seats.map((seat, i) => {
             const def = getSeat(seat.seatId);
             const total = seat.answered + seat.failed;
+            const name = seat.name ?? def?.name ?? seat.seatId;
+            const company = seat.company ?? def?.providerKey;
             return (
               <View key={seat.seatId}>
                 {i > 0 ? <Divider /> : null}
@@ -185,9 +187,11 @@ export function InsightsPanel({
                     <Txt variant="mono" tone="tertiary">
                       {pad2(i + 1)}
                     </Txt>
-                    <ProviderLogo provider={def?.providerKey} size={30} />
+                    <ProviderLogo company={company} model={seat.seatId} size={30} tile />
                     <View style={styles.flex}>
-                      <Txt variant="calloutMedium">{def?.name ?? seat.seatId}</Txt>
+                      <Txt variant="calloutMedium" numberOfLines={1}>
+                        {name}
+                      </Txt>
                       <Txt variant="caption" tone="secondary">
                         {seat.wins} {seat.wins === 1 ? 'preference' : 'preferences'} · {formatPercent(seat.wins / totalWins)} of votes
                       </Txt>

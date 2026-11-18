@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { ATTACHMENT_LIMITS } from '../shared/types';
+import { ATTACHMENT_LIMITS, MODEL_SELECTION_LIMITS } from '../shared/types';
 
 const email = z
   .string()
@@ -34,6 +34,12 @@ export const councilSchema = z.object({
   attachmentIds: z
     .array(z.string().trim().min(1))
     .max(ATTACHMENT_LIMITS.maxFiles, `You can attach up to ${ATTACHMENT_LIMITS.maxFiles} files.`)
+    .optional(),
+  models: z
+    .array(z.string().trim().min(1, 'Model id cannot be empty.'))
+    .min(MODEL_SELECTION_LIMITS.min, `Pick at least ${MODEL_SELECTION_LIMITS.min} model.`)
+    .max(MODEL_SELECTION_LIMITS.max, `You can pick up to ${MODEL_SELECTION_LIMITS.max} models.`)
+    .refine((ids) => new Set(ids).size === ids.length, 'Each model can only be picked once.')
     .optional(),
 });
 

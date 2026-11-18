@@ -18,13 +18,13 @@ import Animated, {
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { ProviderLogo } from '@/components/brand';
+import { ProviderLogo } from '@/components/provider-logo';
 import { formatBytes, formatLatency, kindLabel } from '@/lib/format';
 import { haptic } from '@/lib/haptics';
+import { getSeat, seatIndex, shortModelName } from '@/shared/council';
+import type { AttachmentMeta, CouncilTurn } from '@/shared/types';
 import { useAppStore } from '@/store';
 import type { LiveAttachment, LiveTurn } from '@/store/types';
-import { getSeat, SEATS, shortModelName } from '@/shared/council';
-import type { AttachmentMeta, CouncilTurn } from '@/shared/types';
 import { fonts, makeStyles, radius, springs, useTheme } from '@/theme';
 import { Badge, IconTile } from '../ui/layout';
 import { Txt } from '../ui/text';
@@ -102,19 +102,25 @@ function StatusDot({ view }: { view: SeatView }) {
 function SeatChip({ view, active, onPress }: { view: SeatView; active: boolean; onPress: () => void }) {
   const styles = useStyles();
   const { colors } = useTheme();
-  const seat = getSeat(view.seatId);
   const progress = useDerivedValue(() => withTiming(active ? 1 : 0, { duration: 180 }), [active]);
   const chipStyle = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(progress.get(), [0, 1], [colors.card, colors.muted]),
     borderColor: interpolateColor(progress.get(), [0, 1], [colors.border, colors.input]),
   }));
   return (
-    <Pressable onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: active }} accessibilityLabel={seat?.name}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={view.name}
+      style={styles.chipWrap}
+    >
       <Animated.View style={[styles.chip, chipStyle]}>
-        <StatusDot view={view} />
+        <ProviderLogo company={view.rotations ? undefined : view.company} model={view.model} size={14} />
         <Txt variant="label" tone={active ? 'primary' : 'secondary'} numberOfLines={1} style={styles.chipText}>
-          {seat?.shortName ?? view.seatId}
+          {view.name}
         </Txt>
+        {view.phase !== 'done' ? <StatusDot view={view} /> : null}
       </Animated.View>
     </Pressable>
   );
@@ -138,8 +144,8 @@ function ActionButton({ label, onPress, children }: { label: string; onPress: ()
 }
 
 /**
- * One assistant turn. Three seats answered, so the message shows one answer
- * at a time with model chips above it — swipe, tap a chip, or use ‹ 1/3 ›.
+ * One assistant turn. When multiple seats answered, shows one answer at a time
+ * with model chips above it — swipe, tap a chip, or use ‹ 1/N ›.
  */
 function AssistantMessage({
   views,
@@ -158,9 +164,8 @@ function AssistantMessage({
   const showToast = useAppStore((s) => s.showToast);
   const [copied, setCopied] = useState(false);
 
-  const ordered = [...views].sort(
-    (a, b) => SEATS.findIndex((s) => s.id === a.seatId) - SEATS.findIndex((s) => s.id === b.seatId),
-  );
+  const isLegacyTurn = views.length > 0 && views.every((v) => Boolean(getSeat(v.seatId)));
+  const ordered = isLegacyTurn ? [...views].sort((a, b) => seatIndex(a.seatId) - seatIndex(b.seatId)) : views;
   const n = ordered.length;
   // Until the user picks, follow the first seat that has something to show.
   const autoIndex = Math.max(
@@ -169,11 +174,10 @@ function AssistantMessage({
       ? ordered.findIndex((v) => v.seatId === turn.preferredAgentId)
       : ordered.findIndex((v) => v.text || v.phase === 'error'),
   );
-  const index = Math.min(selection ? selection.index : autoIndex, n - 1);
+  const index = Math.min(selection ? selection.index : autoIndex, Math.max(0, n - 1));
   const view = ordered[index];
-  const seat = getSeat(view.seatId);
-  const live = view.phase !== 'done' && view.phase !== 'error';
-  const preferred = turn?.preferredAgentId === view.seatId;
+  const live = view ? view.phase !== 'done' && view.phase !== 'error' : false;
+  const preferred = view ? turn?.preferredAgentId === view.seatId : false;
 
   // Switching seats slides the new answer in from the side it came from.
   // (A shared-value animation, not a layout `entering` animation: on web those
@@ -183,6 +187,7 @@ function AssistantMessage({
   const drag = useSharedValue(0);
 
   const go = (next: number) => {
+    if (n <= 1) return;
     const wrapped = (next + n) % n;
     if (wrapped === index) return;
     haptic.select();
@@ -192,8 +197,9 @@ function AssistantMessage({
     selectSeat(selectionKey, wrapped);
   };
 
-  // Horizontal swipe on the answer switches seats.
+  // Horizontal swipe on the answer switches seats when multiple models answered.
   const pan = usePanGesture({
+    enabled: n > 1,
     activeOffsetX: [-18, 18],
     failOffsetY: [-12, 12],
     onUpdate: (e) => {
@@ -213,6 +219,8 @@ function AssistantMessage({
     opacity: swap.get() * (1 - Math.min(Math.abs(drag.get()) / 160, 0.4)),
   }));
 
+  if (!view) return null;
+
   const copy = async () => {
     await Clipboard.setStringAsync(view.text);
     haptic.success();
@@ -222,25 +230,27 @@ function AssistantMessage({
 
   const waitingLabel =
     view.phase === 'thinking'
-      ? `${seat?.shortName ?? 'Model'} is thinking`
+      ? `${view.name} is thinking`
       : view.rotations
-        ? `Switching ${seat?.shortName ?? 'model'} to a backup model`
-        : `Waiting for ${seat?.shortName ?? 'the model'}`;
+        ? `Switching ${view.name} to a backup model`
+        : `Waiting for ${view.name}`;
 
   return (
     <View style={styles.assistant}>
-      <View style={styles.chips} accessibilityRole="tablist">
-        {ordered.map((v, i) => (
-          <SeatChip
-            key={v.seatId}
-            view={v}
-            active={i === index}
-            onPress={() => {
-              if (i !== index) go(i);
-            }}
-          />
-        ))}
-      </View>
+      {n > 1 ? (
+        <View style={styles.chips} accessibilityRole="tablist">
+          {ordered.map((v, i) => (
+            <SeatChip
+              key={v.seatId}
+              view={v}
+              active={i === index}
+              onPress={() => {
+                if (i !== index) go(i);
+              }}
+            />
+          ))}
+        </View>
+      ) : null}
 
       <GestureDetector gesture={pan}>
         <Animated.View style={dragStyle}>
@@ -249,7 +259,7 @@ function AssistantMessage({
               <View style={[styles.error, { backgroundColor: colors.destructiveSoft }]}>
                 <TriangleAlert size={16} color={colors.destructive} strokeWidth={1.75} style={styles.errorIcon} />
                 <Txt variant="callout" tone="danger" style={styles.flex}>
-                  {view.error || `${seat?.name ?? 'This model'} could not answer.`}
+                  {view.error || `${view.name} could not answer.`}
                 </Txt>
               </View>
             ) : view.text ? (
@@ -291,20 +301,22 @@ function AssistantMessage({
             </>
           ) : null}
 
-          <View style={styles.pager}>
-            <ActionButton label="Previous model" onPress={() => go(index - 1)}>
-              <ChevronLeft size={16} color={colors.mutedForeground} strokeWidth={2} />
-            </ActionButton>
-            <Txt variant="mono" tone="secondary">
-              {index + 1}/{n}
-            </Txt>
-            <ActionButton label="Next model" onPress={() => go(index + 1)}>
-              <ChevronRight size={16} color={colors.mutedForeground} strokeWidth={2} />
-            </ActionButton>
-          </View>
+          {n > 1 ? (
+            <View style={styles.pager}>
+              <ActionButton label="Previous model" onPress={() => go(index - 1)}>
+                <ChevronLeft size={16} color={colors.mutedForeground} strokeWidth={2} />
+              </ActionButton>
+              <Txt variant="mono" tone="secondary">
+                {index + 1}/{n}
+              </Txt>
+              <ActionButton label="Next model" onPress={() => go(index + 1)}>
+                <ChevronRight size={16} color={colors.mutedForeground} strokeWidth={2} />
+              </ActionButton>
+            </View>
+          ) : null}
 
           <View style={styles.meta}>
-            <ProviderLogo model={view.model} provider={view.rotations ? undefined : seat?.providerKey} size={18} />
+            <ProviderLogo company={view.rotations ? undefined : view.company} model={view.model} size={16} />
             <Txt variant="label" tone="secondary" numberOfLines={1} style={[styles.flexShrink, styles.metaText]}>
               {shortModelName(view.model)}
               {view.latencyMs ? ` · ${formatLatency(view.latencyMs)}` : ''}
@@ -462,16 +474,18 @@ const useStyles = makeStyles((c) => ({
   },
   assistant: { gap: 12 },
   chips: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+  chipWrap: { maxWidth: '100%' },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
+    gap: 6,
     height: 28,
     paddingHorizontal: 10,
     borderRadius: radius.md,
     borderWidth: 1,
+    maxWidth: '100%',
   },
-  chipText: { fontSize: 12.5 },
+  chipText: { fontSize: 12.5, flexShrink: 1 },
   error: { flexDirection: 'row', gap: 10, padding: 12, borderRadius: radius.md },
   errorIcon: { marginTop: 2 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 2, marginLeft: -6 },

@@ -1,15 +1,41 @@
 import { api, ApiError, setAuthToken } from '@/lib/api';
-import type { ChatSlice, PrefsSlice, SessionSlice, SliceCreator, ThreadsSlice, UISlice } from './types';
+import { DEFAULT_MODEL_IDS, MODEL_SELECTION_LIMITS, type ModelCatalog } from '@/shared/types';
+import type { CatalogSlice, ChatSlice, PrefsSlice, SessionSlice, SliceCreator, ThreadsSlice, UISlice } from './types';
 
 export { createChatSlice } from './chat';
+
+const CATALOG_STALE_MS = 5 * 60 * 1000;
+let catalogFetchedAt = 0;
+let catalogPromise: Promise<void> | null = null;
 
 function message(err: unknown, fallback: string): string {
   return err instanceof ApiError || err instanceof Error ? err.message || fallback : fallback;
 }
 
+function reconcileSelection(selected: string[], catalog: ModelCatalog): string[] {
+  const freeIds = new Set(catalog.models.filter((m) => m.access === 'free').map((m) => m.id));
+  const kept = Array.from(new Set(selected))
+    .filter((id) => freeIds.has(id))
+    .slice(0, MODEL_SELECTION_LIMITS.max);
+  if (kept.length >= MODEL_SELECTION_LIMITS.min) return kept;
+
+  const defaults = Array.from(new Set(catalog.defaults))
+    .filter((id) => freeIds.has(id))
+    .slice(0, MODEL_SELECTION_LIMITS.max);
+  if (defaults.length >= MODEL_SELECTION_LIMITS.min) return defaults;
+
+  const firstFree = catalog.models
+    .filter((m) => m.access === 'free')
+    .slice(0, MODEL_SELECTION_LIMITS.min)
+    .map((m) => m.id);
+  return firstFree.length ? firstFree : [...DEFAULT_MODEL_IDS];
+}
+
 const SIGNED_OUT = {
   token: null,
   user: null,
+  catalog: null,
+  catalogStatus: 'idle',
   threads: [],
   threadsStatus: 'idle',
   threadQuery: '',
@@ -23,7 +49,7 @@ const SIGNED_OUT = {
   synthesizing: {},
   seatSelection: {},
   drawerOpen: false,
-} satisfies Partial<SessionSlice & ThreadsSlice & ChatSlice & UISlice>;
+} satisfies Partial<SessionSlice & CatalogSlice & ThreadsSlice & ChatSlice & UISlice>;
 
 export const createSessionSlice: SliceCreator<SessionSlice> = (set, get) => ({
   token: null,
@@ -35,6 +61,7 @@ export const createSessionSlice: SliceCreator<SessionSlice> = (set, get) => ({
     setAuthToken(token);
     set({ token, user });
     void get().loadThreads();
+    void get().loadCatalog();
   },
 
   signUp: async (email, password, fullName) => {
@@ -42,11 +69,14 @@ export const createSessionSlice: SliceCreator<SessionSlice> = (set, get) => ({
     setAuthToken(token);
     set({ token, user });
     void get().loadThreads();
+    void get().loadCatalog();
   },
 
   signOut: async ({ everywhere = false, remote = true } = {}) => {
     get().cancel();
     if (remote) await api.signOut(everywhere).catch(() => {});
+    catalogFetchedAt = 0;
+    catalogPromise = null;
     setAuthToken(null);
     set(SIGNED_OUT);
   },
@@ -74,6 +104,71 @@ export const createPrefsSlice: SliceCreator<PrefsSlice> = (set) => ({
   setThemePreference: (themePreference) => set({ themePreference }),
   setHapticsEnabled: (hapticsEnabled) => set({ hapticsEnabled }),
   setContextEnabled: (contextEnabled) => set({ contextEnabled }),
+});
+
+export const createCatalogSlice: SliceCreator<CatalogSlice> = (set, get) => ({
+  selectedModels: [...DEFAULT_MODEL_IDS],
+  catalog: null,
+  catalogStatus: 'idle',
+
+  setSelectedModels: (ids) => {
+    const catalog = get().catalog;
+    const freeIds = catalog ? new Set(catalog.models.filter((m) => m.access === 'free').map((m) => m.id)) : null;
+    const next = Array.from(new Set(ids))
+      .filter((id) => (freeIds ? freeIds.has(id) : true))
+      .slice(0, MODEL_SELECTION_LIMITS.max);
+    if (next.length < MODEL_SELECTION_LIMITS.min) return;
+    set({ selectedModels: next });
+  },
+
+  toggleModel: (id) => {
+    const catalog = get().catalog;
+    if (catalog) {
+      const entry = catalog.models.find((m) => m.id === id);
+      if (!entry || entry.access !== 'free') return;
+    }
+    const current = get().selectedModels;
+    if (current.includes(id)) {
+      if (current.length <= MODEL_SELECTION_LIMITS.min) return;
+      set({ selectedModels: current.filter((m) => m !== id) });
+      return;
+    }
+    if (current.length >= MODEL_SELECTION_LIMITS.max) {
+      get().showToast(`Pick up to ${MODEL_SELECTION_LIMITS.max} models`);
+      return;
+    }
+    set({ selectedModels: [...current, id] });
+  },
+
+  loadCatalog: async (opts) => {
+    if (!get().token) return;
+    const force = opts?.force ?? false;
+    if (catalogPromise && !force) return catalogPromise;
+    const fresh =
+      !force &&
+      get().catalog !== null &&
+      get().catalogStatus === 'ready' &&
+      Date.now() - catalogFetchedAt < CATALOG_STALE_MS;
+    if (fresh) return;
+
+    set({ catalogStatus: get().catalog ? 'ready' : 'loading' });
+    const run = (async () => {
+      try {
+        const catalog = await api.catalog();
+        if (!get().token) return;
+        catalogFetchedAt = Date.now();
+        const selectedModels = reconcileSelection(get().selectedModels, catalog);
+        set({ catalog, catalogStatus: 'ready', selectedModels });
+      } catch {
+        if (!get().token) return;
+        set({ catalogStatus: get().catalog ? 'ready' : 'error' });
+      }
+    })().finally(() => {
+      if (catalogPromise === run) catalogPromise = null;
+    });
+    catalogPromise = run;
+    return run;
+  },
 });
 
 export const createThreadsSlice: SliceCreator<ThreadsSlice> = (set, get) => ({

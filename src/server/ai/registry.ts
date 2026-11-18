@@ -34,9 +34,18 @@ const KEY_URL = 'https://openrouter.ai/api/v1/auth/key';
 const TTL_MS = 5 * 60_000;
 const KEY_TTL_MS = 60_000;
 
-interface CatalogModel {
+export interface OpenRouterModel {
   id: string;
+  name?: string;
+  description?: string;
+  context_length?: number | null;
+  created?: number;
   pricing?: { prompt?: string | number; completion?: string | number };
+  architecture?: {
+    modality?: string;
+    input_modalities?: string[];
+    output_modalities?: string[];
+  };
 }
 
 interface KeyStatus {
@@ -58,7 +67,7 @@ export interface SeatConfig {
 }
 
 interface RegistryState {
-  catalog: { at: number; models: Map<string, CatalogModel> } | null;
+  catalog: { at: number; models: Map<string, OpenRouterModel> } | null;
   seats: { at: number; configs: SeatConfig[] } | null;
   keys: { at: number; statuses: KeyStatus[] } | null;
   inflight: Promise<SeatConfig[]> | null;
@@ -69,19 +78,19 @@ const state: RegistryState = (g.__traRegistry ??= { catalog: null, seats: null, 
 
 /* Catalog ------------------------------------------------------------------ */
 
-function isStrictlyFree(model: CatalogModel): boolean {
+function isStrictlyFree(model: OpenRouterModel): boolean {
   const prompt = Number(model.pricing?.prompt ?? -1);
   const completion = Number(model.pricing?.completion ?? -1);
   return (prompt === 0 && completion === 0) || model.id.endsWith(':free');
 }
 
-export async function fetchCatalog(force = false): Promise<Map<string, CatalogModel> | null> {
+export async function fetchCatalog(force = false): Promise<Map<string, OpenRouterModel> | null> {
   if (!force && state.catalog && Date.now() - state.catalog.at < TTL_MS) return state.catalog.models;
   try {
     const res = await fetch(MODELS_URL, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const payload: any = await res.json();
-    const models = new Map<string, CatalogModel>();
+    const models = new Map<string, OpenRouterModel>();
     for (const m of payload?.data ?? []) if (m?.id) models.set(m.id, m);
     state.catalog = { at: Date.now(), models };
     return models;

@@ -29,6 +29,7 @@ function check(name, ok, detail = '') {
 const email = `smoke+${Date.now()}@example.test`;
 check('health', (await call('GET', '/api/health')).status === 200);
 check('attachments require auth', (await fetch(`${BASE}/api/attachments`, { method: 'POST' })).status === 401);
+check('catalog requires auth', (await fetch(`${BASE}/api/catalog`)).status === 401);
 
 const signup = await call('POST', '/api/auth/signup', { email, password: 'correct-horse-9', fullName: 'Smoke Test' });
 check('sign up', signup.status === 201 && !!signup.data.token, signup.data.error);
@@ -41,6 +42,16 @@ check('session', me.data.user?.email === email);
 check('threads list', Array.isArray((await call('GET', '/api/threads')).data.threads));
 const models = await call('GET', '/api/models');
 check('council status', models.status === 200 && models.data.seats?.length === 3, `quota ${JSON.stringify(models.data.quota)}`);
+const catalog = await call('GET', '/api/catalog');
+check(
+  'catalog',
+  catalog.status === 200 &&
+    Array.isArray(catalog.data.models) &&
+    catalog.data.models.some((m) => m.access === 'free') &&
+    Array.isArray(catalog.data.defaults) &&
+    catalog.data.defaults.length > 0,
+  `${catalog.data.models?.length ?? 0} models`,
+);
 check('insights', (await call('GET', '/api/insights')).status === 200);
 
 if (runCouncil) {

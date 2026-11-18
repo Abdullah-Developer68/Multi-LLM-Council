@@ -9,11 +9,11 @@ import { makeStyles, radius, useTheme } from '@/theme';
 import { IconTile } from '../ui/layout';
 import { Txt } from '../ui/text';
 
-const SUGGESTIONS: { icon: LucideIcon; label: string; description: string; prompt: string }[] = [
+const SUGGESTIONS: { icon: LucideIcon; label: string; description: string | ((count: number) => string); prompt: string }[] = [
   {
     icon: Code,
     label: 'Design a rate limiter',
-    description: 'Three takes on the trade-offs',
+    description: (count) => (count === 1 ? 'One take on the trade-offs' : `${count} takes on the trade-offs`),
     prompt: 'Design a rate limiter for a public API and explain the trade-offs',
   },
   {
@@ -41,6 +41,7 @@ export function EmptyState() {
   const styles = useStyles();
   const { colors } = useTheme();
   const name = useAppStore((s) => s.user?.fullName?.split(' ')[0]);
+  const selectedCount = useAppStore((s) => s.selectedModels.length);
   const setDraft = useAppStore((s) => s.setDraft);
 
   return (
@@ -72,7 +73,7 @@ export function EmptyState() {
                   {s.label}
                 </Txt>
                 <Txt variant="caption" tone="secondary">
-                  {s.description}
+                  {typeof s.description === 'function' ? s.description(selectedCount) : s.description}
                 </Txt>
               </View>
               <ChevronRight size={16} color={colors.mutedForeground} strokeWidth={1.75} />

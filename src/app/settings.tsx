@@ -136,7 +136,7 @@ export default function SettingsScreen() {
                 <Badge label="Current" variant="secondary" />
               </View>
               <Txt variant="caption" tone="secondary">
-                Three free models · prompt refiner · consensus on demand
+                Up to 4 free models · prompt refiner · consensus on demand
               </Txt>
             </View>
             <Button label="Upgrade to Pro" icon={Sparkles} fullWidth onPress={() => router.push('/pricing')} />
@@ -172,7 +172,7 @@ export default function SettingsScreen() {
                 trailing={<Toggle value={hapticsEnabled} onChange={setHapticsEnabled} label="Haptic feedback" />}
               />
             ) : null}
-            <ListItem icon={Cpu} title="Council status" value="3 seats" onPress={() => navigateTo('/settings', '/council')} />
+            <ListItem icon={Cpu} title="Model status" value="Free tier" onPress={() => navigateTo('/settings', '/council')} />
           </ListGroup>
           <Txt variant="caption" tone="secondary" style={styles.footnote}>
             Memory sends a summary of the last three turns with each follow-up so the council keeps context.

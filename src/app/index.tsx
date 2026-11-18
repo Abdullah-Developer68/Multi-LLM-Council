@@ -27,11 +27,12 @@ function Header() {
   const user = useAppStore((s) => s.user);
   const hasThread = useAppStore((s) => !!s.activeThreadId);
   const title = useAppStore((s) => s.threads.find((t) => t.id === s.activeThreadId)?.title);
+  const modelCount = useAppStore((s) => s.selectedModels.length);
 
   return (
     <AppHeader
       title={hasThread ? (title ?? 'Conversation') : 'Council'}
-      subtitle={hasThread ? 'Council · 3 models' : undefined}
+      subtitle={hasThread ? `Council · ${modelCount} ${modelCount === 1 ? 'model' : 'models'}` : undefined}
       onTitlePress={() => router.push('/council')}
       bordered={hasThread}
       leading={<IconButton icon={Menu} label="Open sidebar" size={40} onPress={() => setDrawerOpen(true)} color={colors.foreground} />}
@@ -62,7 +63,13 @@ function ErrorBanner() {
             {error.message}
           </Txt>
           <View style={styles.errorActions}>
-            <Button label="Try again" size="sm" variant="outline" icon={RotateCcw} onPress={() => send(error.prompt)} />
+            <Button
+              label="Try again"
+              size="sm"
+              variant="outline"
+              icon={RotateCcw}
+              onPress={() => send(error.prompt, { models: error.models })}
+            />
             <Button label="Dismiss" size="sm" variant="ghost" icon={X} onPress={dismiss} />
           </View>
         </View>
@@ -133,9 +140,15 @@ function Conversation() {
 export default function ChatScreen() {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
+  const token = useAppStore((s) => s.token);
+  const loadCatalog = useAppStore((s) => s.loadCatalog);
   const drawerOpen = useAppStore((s) => s.drawerOpen);
   const setDrawerOpen = useAppStore((s) => s.setDrawerOpen);
   const progress = useSharedValue(0);
+
+  useEffect(() => {
+    if (token) void loadCatalog();
+  }, [token, loadCatalog]);
 
   useEffect(() => {
     progress.set(withSpring(drawerOpen ? 1 : 0, springs.gentle));

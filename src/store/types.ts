@@ -1,7 +1,15 @@
 import type { StateCreator } from 'zustand';
 
 import type { ThemePreference } from '@/theme/tokens';
-import type { AttachmentKind, AttachmentMeta, CouncilTurn, SeatResponse, ThreadSummary, UserAccount } from '@/shared/types';
+import type {
+  AttachmentKind,
+  AttachmentMeta,
+  CouncilTurn,
+  ModelCatalog,
+  SeatResponse,
+  ThreadSummary,
+  UserAccount,
+} from '@/shared/types';
 
 export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -25,6 +33,15 @@ export interface PrefsSlice {
   setContextEnabled: (value: boolean) => void;
 }
 
+export interface CatalogSlice {
+  selectedModels: string[];
+  catalog: ModelCatalog | null;
+  catalogStatus: LoadStatus;
+  setSelectedModels: (ids: string[]) => void;
+  toggleModel: (id: string) => void;
+  loadCatalog: (opts?: { force?: boolean }) => Promise<void>;
+}
+
 export interface ThreadsSlice {
   threads: ThreadSummary[];
   threadsStatus: LoadStatus;
@@ -39,6 +56,8 @@ export type LiveSeatStatus = 'waiting' | 'thinking' | 'streaming' | 'done' | 'er
 
 export interface LiveSeat {
   seatId: string;
+  name: string;
+  company?: string;
   status: LiveSeatStatus;
   model: string;
   text: string;
@@ -77,6 +96,7 @@ export interface LiveTurn {
   originThreadId: string | null;
   title: string | null;
   startedAt: number;
+  models: string[];
   attachments: LiveAttachment[];
   refinement: {
     status: 'refining' | 'done';
@@ -96,6 +116,7 @@ export interface ChatSlice {
   chatError: {
     message: string;
     prompt: string;
+    models?: string[];
     attachmentIds?: string[];
     attachments?: LiveAttachment[];
   } | null;
@@ -111,7 +132,7 @@ export interface ChatSlice {
   addAttachments: (files: NewDraftAttachment[]) => void;
   removeAttachment: (localId: string) => void;
   retryAttachment: (localId: string) => void;
-  send: (prompt: string, opts?: { fromComposer?: boolean }) => Promise<void>;
+  send: (prompt: string, opts?: { fromComposer?: boolean; models?: string[] }) => Promise<void>;
   cancel: () => void;
   dismissError: () => void;
   vote: (turnId: string, seatId: string) => Promise<void>;
@@ -132,5 +153,5 @@ export interface UISlice {
   dismissToast: (id: number) => void;
 }
 
-export type AppStore = SessionSlice & PrefsSlice & ThreadsSlice & ChatSlice & UISlice;
+export type AppStore = SessionSlice & PrefsSlice & CatalogSlice & ThreadsSlice & ChatSlice & UISlice;
 export type SliceCreator<T> = StateCreator<AppStore, [['zustand/persist', unknown]], [], T>;

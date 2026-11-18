@@ -1,11 +1,12 @@
 import { eq } from 'drizzle-orm';
 
-import { REFINER, SEATS } from '../../shared/council';
-import type { CouncilEvent, CouncilTurn, SeatResponse, UserAccount } from '../../shared/types';
+import { REFINER } from '../../shared/council';
+import type { CatalogModel, CouncilEvent, CouncilTurn, SeatResponse, UserAccount } from '../../shared/types';
 import { buildAttachmentsBlock, loadOwnedAttachments, toAttachmentMeta } from '../attachments/store';
 import { db } from '../db/client';
 import { chatThreads, multiAgentTurns, type AttachmentRow } from '../db/schema';
 import { listThreadTurns, newId, requireOwnedThread, titleFromPrompt, toCouncilTurn } from '../turns';
+import { resolveChosenModels } from './catalog';
 import { seatMessages, summarize, type ContextTurn } from './directives';
 import { refinePrompt } from './refiner';
 import { AbortedError, primaryModelFor, runSeat } from './rotation';
@@ -19,6 +20,8 @@ export interface CouncilRequest {
   useContext: boolean;
   attachmentIds?: string[];
   attachments?: AttachmentRow[];
+  modelIds?: string[];
+  models?: CatalogModel[];
   signal?: AbortSignal;
   emit: (event: CouncilEvent) => void;
 }
@@ -38,13 +41,14 @@ async function loadContext(threadId: string): Promise<ContextTurn[]> {
 
 /**
  * Runs one council turn: the Prompt Refiner rewrites the prompt once, then all
- * three seats answer concurrently from that refined prompt. Tokens stream out
- * as events; the turn is persisted once at least one seat has answered.
+ * chosen models answer concurrently from that refined prompt. Tokens stream out
+ * as events; the turn is persisted once at least one model has answered.
  */
 export async function runCouncil(req: CouncilRequest): Promise<CouncilTurn> {
   const started = Date.now();
   const { user, prompt, emit, signal } = req;
 
+  const chosenModels = req.models ?? (await resolveChosenModels(req.modelIds));
   const attachments = req.attachments ?? (await loadOwnedAttachments(user.id, req.attachmentIds));
   const attachmentMetas = attachments.map(toAttachmentMeta);
   const attachmentsBlock = buildAttachmentsBlock(attachments);
@@ -61,34 +65,36 @@ export async function runCouncil(req: CouncilRequest): Promise<CouncilTurn> {
   emit({ type: 'refine:done', refinement });
 
   const responses = await Promise.all(
-    SEATS.map(async (seat): Promise<SeatResponse> => {
+    chosenModels.map(async (chosen): Promise<SeatResponse> => {
       const base = {
-        agentId: seat.id,
-        agentName: seat.name,
+        agentId: chosen.id,
+        agentName: chosen.name,
+        company: chosen.company,
         receivedPrompt: refinement.prompt,
       };
 
-      const primary = await primaryModelFor(seat.id);
       emit({
         type: 'seat:start',
-        seatId: seat.id,
-        model: primary,
-        name: seat.name,
-        company: seat.providerKey,
+        seatId: chosen.id,
+        model: chosen.id,
+        name: chosen.name,
+        company: chosen.company,
       });
 
       let response: SeatResponse;
       try {
         const result = await runSeat({
-          seatId: seat.id,
-          seatName: seat.name,
-          messages: seatMessages(seat, refinement.prompt, attachmentsBlock),
+          seatId: chosen.id,
+          seatName: chosen.name,
+          candidates: [chosen.id],
+          strict: true,
+          messages: seatMessages(chosen, refinement.prompt, attachmentsBlock),
           signal,
           onEvent: (event) => {
-            if (event.type === 'delta') emit({ type: 'seat:delta', seatId: seat.id, text: event.text });
-            else if (event.type === 'reset') emit({ type: 'seat:reset', seatId: seat.id });
-            else if (event.type === 'thinking') emit({ type: 'seat:thinking', seatId: seat.id });
-            else emit({ type: 'seat:rotate', seatId: seat.id, model: event.model, reason: event.reason });
+            if (event.type === 'delta') emit({ type: 'seat:delta', seatId: chosen.id, text: event.text });
+            else if (event.type === 'reset') emit({ type: 'seat:reset', seatId: chosen.id });
+            else if (event.type === 'thinking') emit({ type: 'seat:thinking', seatId: chosen.id });
+            else emit({ type: 'seat:rotate', seatId: chosen.id, model: event.model, reason: event.reason });
           },
         });
         response = {
@@ -105,13 +111,13 @@ export async function runCouncil(req: CouncilRequest): Promise<CouncilTurn> {
         if (err instanceof AbortedError) throw err;
         response = {
           ...base,
-          model: primary,
+          model: chosen.id,
           answer: '',
           status: 'error',
           error: (err as Error).message,
         };
       }
-      emit({ type: 'seat:done', seatId: seat.id, response });
+      emit({ type: 'seat:done', seatId: chosen.id, response });
       return response;
     }),
   );
@@ -142,7 +148,7 @@ export async function runCouncil(req: CouncilRequest): Promise<CouncilTurn> {
       },
       consensusSolution: '',
       agentResponses: responses,
-      rankedAgentIds: SEATS.map((s) => s.id),
+      rankedAgentIds: chosenModels.map((m) => m.id),
       meta: {
         elapsedMs: Date.now() - started,
         contextTurns: context.length,

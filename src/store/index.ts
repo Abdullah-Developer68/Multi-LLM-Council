@@ -3,7 +3,15 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { setAuthToken, setUnauthorizedHandler } from '@/lib/api';
 import { safeStorage } from '@/lib/storage';
-import { createChatSlice, createPrefsSlice, createSessionSlice, createThreadsSlice, createUISlice } from './slices';
+import { DEFAULT_MODEL_IDS } from '@/shared/types';
+import {
+  createCatalogSlice,
+  createChatSlice,
+  createPrefsSlice,
+  createSessionSlice,
+  createThreadsSlice,
+  createUISlice,
+} from './slices';
 import type { AppStore } from './types';
 
 export const useAppStore = create<AppStore>()(
@@ -11,6 +19,7 @@ export const useAppStore = create<AppStore>()(
     (...a) => ({
       ...createSessionSlice(...a),
       ...createPrefsSlice(...a),
+      ...createCatalogSlice(...a),
       ...createThreadsSlice(...a),
       ...createChatSlice(...a),
       ...createUISlice(...a),
@@ -25,10 +34,14 @@ export const useAppStore = create<AppStore>()(
         themePreference: s.themePreference,
         hapticsEnabled: s.hapticsEnabled,
         contextEnabled: s.contextEnabled,
+        selectedModels: s.selectedModels,
       }),
       onRehydrateStorage: () => (state) => {
         setAuthToken(state?.token ?? null);
-        useAppStore.setState({ hydrated: true });
+        useAppStore.setState({
+          hydrated: true,
+          ...(!state?.selectedModels?.length ? { selectedModels: [...DEFAULT_MODEL_IDS] } : {}),
+        });
       },
     },
   ),

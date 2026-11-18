@@ -1,15 +1,17 @@
-import { ArrowUp, Layers, Plus, Square } from 'lucide-react-native';
+import { ArrowUp, ChevronDown, Layers, Plus, Square } from 'lucide-react-native';
 import { useState } from 'react';
 import { Keyboard, Platform, Pressable, TextInput, View, type TextInputKeyPressEvent } from 'react-native';
 
+import { ProviderLogo } from '@/components/provider-logo';
 import { haptic } from '@/lib/haptics';
+import { SEATS, shortModelName } from '@/shared/council';
 import { useAppStore } from '@/store';
 import { control, elevation, fonts, makeStyles, radius, useTheme } from '@/theme';
 import { IconButton } from '../ui/button';
-import { Badge } from '../ui/layout';
 import { Txt } from '../ui/text';
 import { AttachSheet } from './attach-sheet';
 import { AttachmentTray } from './attachment-tray';
+import { ModelPicker } from './model-picker';
 
 const MIN_HEIGHT = 44;
 const MAX_HEIGHT = 200;
@@ -53,7 +55,73 @@ function SendButton({ live, canSend, onSend, onStop }: { live: boolean; canSend:
   );
 }
 
-/** Composer card: auto-growing input, memory toggle, send/stop. */
+/** Ghost model-picker trigger next to `+` in the composer's bottom row. */
+function ModelButton({ disabled, onPress }: { disabled: boolean; onPress: () => void }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const selectedModels = useAppStore((s) => s.selectedModels);
+  const catalog = useAppStore((s) => s.catalog);
+
+  const count = selectedModels.length;
+  const resolveMeta = (id: string) => {
+    const entry = catalog?.models.find((m) => m.id === id);
+    const legacy = SEATS.find((s) => s.defaultModel === id || s.id === id);
+    return {
+      name: entry?.name ?? legacy?.name ?? shortModelName(id),
+      company: entry?.company ?? legacy?.providerKey,
+    };
+  };
+
+  const single = count === 1 ? resolveMeta(selectedModels[0]) : null;
+  const label = single ? single.name : `${count} models`;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      hitSlop={4}
+      accessibilityRole="button"
+      accessibilityLabel={`Choose models, ${single ? single.name : `${count} models selected`}`}
+      style={({ pressed }) => [
+        styles.modelButton,
+        pressed && { backgroundColor: colors.muted },
+        disabled && styles.disabled,
+      ]}
+    >
+      {single ? (
+        <ProviderLogo company={single.company} model={selectedModels[0]} size={16} />
+      ) : (
+        <View style={styles.stack}>
+          {selectedModels.slice(0, 3).map((id, idx) => {
+            const meta = resolveMeta(id);
+            return (
+              <View
+                key={id}
+                style={[
+                  styles.stackCircle,
+                  {
+                    backgroundColor: colors.muted,
+                    borderColor: colors.card,
+                    marginLeft: idx === 0 ? 0 : -7,
+                    zIndex: 3 - idx,
+                  },
+                ]}
+              >
+                <ProviderLogo company={meta.company} model={id} size={11} />
+              </View>
+            );
+          })}
+        </View>
+      )}
+      <Txt variant="calloutMedium" color={colors.foreground} numberOfLines={1} style={styles.modelLabel}>
+        {label}
+      </Txt>
+      <ChevronDown size={16} color={colors.mutedForeground} strokeWidth={1.75} />
+    </Pressable>
+  );
+}
+
+/** Composer card: auto-growing input, model picker, memory toggle, send/stop. */
 export function Composer({ autoFocus = false }: { autoFocus?: boolean }) {
   const styles = useStyles();
   const { colors } = useTheme();
@@ -69,6 +137,7 @@ export function Composer({ autoFocus = false }: { autoFocus?: boolean }) {
   const [height, setHeight] = useState(MIN_HEIGHT);
   const [focused, setFocused] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const hasUploading = draftAttachments.some((a) => a.status === 'uploading');
   const hasError = draftAttachments.some((a) => a.status === 'error');
@@ -135,6 +204,14 @@ export function Composer({ autoFocus = false }: { autoFocus?: boolean }) {
               setAttachOpen(true);
             }}
           />
+          <ModelButton
+            disabled={live}
+            onPress={() => {
+              haptic.select();
+              Keyboard.dismiss();
+              setPickerOpen(true);
+            }}
+          />
           {inThread ? (
             <Pressable
               onPress={() => {
@@ -146,16 +223,12 @@ export function Composer({ autoFocus = false }: { autoFocus?: boolean }) {
               accessibilityState={{ checked: contextEnabled }}
               accessibilityLabel="Remember earlier messages"
             >
-              <Layers size={15} color={contextEnabled ? colors.foreground : colors.mutedForeground} strokeWidth={1.75} />
+              <Layers size={16} color={contextEnabled ? colors.foreground : colors.mutedForeground} strokeWidth={1.75} />
               <Txt variant="calloutMedium" color={contextEnabled ? colors.foreground : colors.mutedForeground} style={styles.toolText}>
                 Memory {contextEnabled ? 'on' : 'off'}
               </Txt>
             </Pressable>
-          ) : (
-            <View style={styles.hint}>
-              <Badge label="3 models" variant="secondary" />
-            </View>
-          )}
+          ) : null}
           <View style={styles.flex} />
           {draft.length > LIMIT * 0.8 ? (
             <Txt variant="mono" tone={draft.length > LIMIT ? 'danger' : 'secondary'}>
@@ -166,6 +239,7 @@ export function Composer({ autoFocus = false }: { autoFocus?: boolean }) {
         </View>
       </View>
       <AttachSheet visible={attachOpen} onClose={() => setAttachOpen(false)} />
+      <ModelPicker visible={pickerOpen} onClose={() => setPickerOpen(false)} />
       {inThread ? null : (
         <Txt variant="label" tone="secondary" style={styles.disclaimer}>
           Council uses free AI models and can make mistakes.
@@ -194,18 +268,40 @@ const useStyles = makeStyles((c) => ({
     textAlignVertical: 'top',
   },
   webInput: { outlineStyle: 'none' } as object,
-  row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  modelButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    height: control.sm,
+    paddingHorizontal: 8,
+    borderRadius: radius.pill,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  modelLabel: { fontSize: 13, flexShrink: 1, maxWidth: 140 },
+  stack: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 },
+  stackCircle: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  disabled: { opacity: 0.45 },
   tool: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     height: control.sm,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     borderRadius: radius.pill,
+    flexShrink: 0,
   },
   toolText: { fontSize: 13 },
-  hint: { paddingLeft: 4 },
   attachHint: { paddingHorizontal: 6, paddingBottom: 2 },
   disclaimer: { textAlign: 'center', fontFamily: fonts.regular },
-  flex: { flex: 1 },
+  flex: { flex: 1, minWidth: 0 },
 }));

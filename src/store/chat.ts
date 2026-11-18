@@ -1,6 +1,6 @@
 import { api, ApiError, streamCouncil, uploadAttachment } from '@/lib/api';
-import { REFINER, SEATS } from '@/shared/council';
-import { ATTACHMENT_LIMITS, type CouncilEvent, type CouncilTurn } from '@/shared/types';
+import { REFINER } from '@/shared/council';
+import { ATTACHMENT_LIMITS, DEFAULT_MODEL_IDS, type CouncilEvent, type CouncilTurn, type ModelCatalog } from '@/shared/types';
 import type {
   AppStore,
   ChatSlice,
@@ -13,7 +13,7 @@ import type {
 
 /**
  * Streaming state lives outside React: tokens are buffered here and flushed
- * into the store at most every FLUSH_MS, so three concurrent token streams
+ * into the store at most every FLUSH_MS, so concurrent token streams
  * don't trigger hundreds of renders per second.
  */
 const FLUSH_MS = 60;
@@ -23,12 +23,24 @@ let flushTimer: ReturnType<typeof setTimeout> | null = null;
 const uploadControllers = new Map<string, AbortController>();
 let attachmentSeq = 0;
 
-function emptySeats(): Record<string, LiveSeat> {
+function emptySeats(modelIds: string[], catalog: ModelCatalog | null): Record<string, LiveSeat> {
+  const byId = new Map(catalog?.models.map((m) => [m.id, m]));
   return Object.fromEntries(
-    SEATS.map((s) => [
-      s.id,
-      { seatId: s.id, status: 'waiting', model: s.defaultModel, text: '', rotations: 0 },
-    ]),
+    modelIds.map((id) => {
+      const entry = byId.get(id);
+      return [
+        id,
+        {
+          seatId: id,
+          name: entry?.name ?? id,
+          company: entry?.company,
+          status: 'waiting',
+          model: id,
+          text: '',
+          rotations: 0,
+        },
+      ];
+    }),
   );
 }
 
@@ -104,9 +116,31 @@ export const createChatSlice: SliceCreator<ChatSlice> = (set, get) => {
         });
         break;
       case 'seat:start':
-        patchSeat(liveId, event.seatId, () => ({
-          model: event.model,
-        }));
+        if (live.seats[event.seatId]) {
+          patchSeat(liveId, event.seatId, () => ({
+            model: event.model,
+            name: event.name,
+            company: event.company,
+          }));
+        } else {
+          set({
+            live: {
+              ...live,
+              seats: {
+                ...live.seats,
+                [event.seatId]: {
+                  seatId: event.seatId,
+                  name: event.name,
+                  company: event.company,
+                  status: 'waiting',
+                  model: event.model,
+                  text: '',
+                  rotations: 0,
+                },
+              },
+            },
+          });
+        }
         break;
       case 'seat:thinking':
         patchSeat(liveId, event.seatId, (s) => ({ status: s.text ? s.status : 'thinking' }));
@@ -124,10 +158,12 @@ export const createChatSlice: SliceCreator<ChatSlice> = (set, get) => {
         break;
       case 'seat:done':
         flush(liveId);
-        patchSeat(liveId, event.seatId, () => ({
+        patchSeat(liveId, event.seatId, (s) => ({
           status: event.response.status === 'ok' ? 'done' : 'error',
           text: event.response.answer,
           model: event.response.model,
+          name: event.response.agentName || s.name,
+          company: event.response.company ?? s.company,
           response: event.response,
         }));
         break;
@@ -143,6 +179,7 @@ export const createChatSlice: SliceCreator<ChatSlice> = (set, get) => {
           chatError: {
             message: event.message,
             prompt: live.prompt,
+            models: live.models,
             attachmentIds: attachmentIds.length ? attachmentIds : undefined,
             attachments: live.attachments.length ? live.attachments : undefined,
           },
@@ -280,10 +317,11 @@ export const createChatSlice: SliceCreator<ChatSlice> = (set, get) => {
 
       const draftAttachments = get().draftAttachments;
       const prevError = get().chatError;
+      const isRetry = !opts?.fromComposer && !!prevError && raw === prevError.prompt;
       let sentAttachments: LiveAttachment[] = [];
       let clearedDraftAttachments = false;
 
-      if (!opts?.fromComposer && prevError && raw === prevError.prompt && prevError.attachments?.length) {
+      if (isRetry && prevError.attachments?.length) {
         sentAttachments = prevError.attachments;
       } else if (draftAttachments.length > 0) {
         if (draftAttachments.some((a) => a.status !== 'ready' || !a.meta)) return;
@@ -301,6 +339,12 @@ export const createChatSlice: SliceCreator<ChatSlice> = (set, get) => {
       const prompt =
         trimmed || (allImages ? 'Please review the attached photo(s).' : 'Please review the attached file(s).');
       const attachmentIds = sentAttachments.map((a) => a.id);
+      const rawModels = opts?.models?.length
+        ? opts.models
+        : isRetry && prevError.models?.length
+          ? prevError.models
+          : get().selectedModels;
+      const models = rawModels.length ? rawModels : [...DEFAULT_MODEL_IDS];
 
       const liveId = `live_${Date.now()}`;
       const originThreadId = get().activeThreadId;
@@ -310,9 +354,10 @@ export const createChatSlice: SliceCreator<ChatSlice> = (set, get) => {
         originThreadId,
         title: get().activeTitle,
         startedAt: Date.now(),
+        models,
         attachments: sentAttachments,
         refinement: { status: 'refining', model: REFINER.defaultModel },
-        seats: emptySeats(),
+        seats: emptySeats(models, get().catalog),
       };
       controller = new AbortController();
       pending = {};
@@ -328,6 +373,7 @@ export const createChatSlice: SliceCreator<ChatSlice> = (set, get) => {
       const errorPayload = (message: string) => ({
         message,
         prompt,
+        models,
         attachmentIds: attachmentIds.length ? attachmentIds : undefined,
         attachments: sentAttachments.length ? sentAttachments : undefined,
       });
@@ -339,6 +385,7 @@ export const createChatSlice: SliceCreator<ChatSlice> = (set, get) => {
             threadId: originThreadId ?? undefined,
             useContext: get().contextEnabled,
             attachmentIds: attachmentIds.length ? attachmentIds : undefined,
+            models,
           },
           { signal: controller.signal, onEvent: (event) => handleEvent(liveId, event) },
         );

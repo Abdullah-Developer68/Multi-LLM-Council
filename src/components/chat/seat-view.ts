@@ -1,9 +1,12 @@
-import type { LiveSeat } from '@/store/types';
+import { getSeat } from '@/shared/council';
 import type { SeatResponse, SeatTier } from '@/shared/types';
+import type { LiveSeat } from '@/store/types';
 
 /** A single shape for rendering a seat, whether it is streaming or finished. */
 export interface SeatView {
   seatId: string;
+  name: string;
+  company?: string;
   phase: 'waiting' | 'thinking' | 'streaming' | 'done' | 'error';
   model: string;
   text: string;
@@ -15,8 +18,11 @@ export interface SeatView {
 }
 
 export function fromResponse(r: SeatResponse): SeatView {
+  const legacy = getSeat(r.agentId);
   return {
     seatId: r.agentId,
+    name: r.agentName || legacy?.name || r.agentId,
+    company: r.company ?? legacy?.providerKey,
     phase: r.status === 'ok' ? 'done' : 'error',
     model: r.model,
     text: r.answer,
@@ -30,8 +36,11 @@ export function fromResponse(r: SeatResponse): SeatView {
 
 export function fromLive(s: LiveSeat): SeatView {
   if (s.response) return fromResponse(s.response);
+  const legacy = getSeat(s.seatId);
   return {
     seatId: s.seatId,
+    name: s.name || legacy?.name || s.seatId,
+    company: s.company ?? legacy?.providerKey,
     phase: s.status,
     model: s.model,
     text: s.text,

@@ -16,6 +16,12 @@ Ask once, three models answer. An Expo mobile app (iOS and Android) in which a p
   - **Photos:** these are shrunk on the phone, then a free vision model transcribes their text and describes them.
   - **How the models use them:** the three seats get the file contents alongside the refined prompt and ground their answers in them.
   - **Not supported:** old binary .doc/.ppt/.xls files and scanned PDFs are rejected with a hint.
+- **Model picker.** The model button in the composer opens a sheet with search, filter chips for each company, real company logos, and a cost hint for each model. You can pick 1–4 models.
+  - **One model** gives a single normal reply. **Several** answer side by side, and you can build a consensus from their answers.
+  - **Selectable models:** every free model on OpenRouter whose output is text. Right now that's NVIDIA, Google Gemma, Cohere, Baidu, inclusionAI, Thinking Machines, Liquid, Recursive, Particle and Dots Studio, plus OpenAI's GPT-OSS 20B on the keyless tier. The keyless tier allows one reply every 45 seconds per server.
+  - **Locked models:** the newest flagship models from OpenAI, Anthropic, Gemini, Meta, Mistral, DeepSeek, Qwen, xAI, Moonshot, Z.ai, MiniMax, Amazon, Perplexity and Microsoft are listed but marked **Pro**. Tapping one opens the pricing page.
+  - **No silent swaps:** a model you picked answers as itself. If it's rate-limited, the app tells you instead of answering with a different model.
+  - **Under the hood:** the catalog comes live from OpenRouter (`GET /api/catalog`), and your selection is saved on the device.
 - **Three answers per message.** Switch between the models using the chips above the answer, the ‹ 1/3 › pager, or a sideways swipe. Answers stream in live and show a pulsing "thinking" indicator.
 - **Prompt refiner (4th model).** Before the council answers, a refiner model rewrites your prompt with standard prompt-engineering techniques: it clarifies the goal, makes requirements explicit, chains multi-part tasks into steps, adds few-shot format examples when useful, and sets the output format. Its instructions live in a skill file, `src/server/ai/skills/prompt-refiner/SKILL.md`. All three seats receive the same refined prompt, and the "Prompt refined" disclosure shows it. If the refiner fails or takes longer than 25 seconds, your original prompt is sent instead. Each turn costs 4 free requests.
 - **Consensus.** "Build consensus" merges all answers into one inline message with these sections: Verdict, Where the council agrees, Where it differs, Final answer.

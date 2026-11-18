@@ -8,6 +8,7 @@ import type {
   CouncilStatus,
   CouncilTurn,
   InsightsSummary,
+  ModelCatalog,
   ThreadSummary,
   UserAccount,
 } from '@/shared/types';
@@ -110,6 +111,7 @@ export const api = {
   councilStatus: () => request<CouncilStatus>('/api/models'),
   verifyCouncil: (action: 'verify' | 'probe') =>
     request<CouncilStatus>('/api/models', { method: 'POST', body: { action } }),
+  catalog: () => request<ModelCatalog>('/api/catalog'),
   insights: () => request<InsightsSummary>('/api/insights'),
 };
 
@@ -202,7 +204,7 @@ export async function uploadAttachment(
  * streams in. Uses `expo/fetch`, which supports streamed bodies on native.
  */
 export async function streamCouncil(
-  body: { prompt: string; threadId?: string; useContext: boolean; attachmentIds?: string[] },
+  body: { prompt: string; threadId?: string; useContext: boolean; attachmentIds?: string[]; models?: string[] },
   opts: { signal: AbortSignal; onEvent: (event: CouncilEvent) => void },
 ): Promise<void> {
   let res;

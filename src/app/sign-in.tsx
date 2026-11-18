@@ -73,7 +73,7 @@ export default function SignInScreen() {
                   {isSignUp ? 'Create your account' : 'Welcome back'}
                 </Txt>
                 <Txt tone="secondary" style={styles.center}>
-                  {isSignUp ? 'Three AI models, one conversation. Free to use.' : 'Log in to continue your conversations.'}
+                  {isSignUp ? 'Ask once, compare answers from several AI models. Free to use.' : 'Log in to continue your conversations.'}
                 </Txt>
               </Animated.View>
 
