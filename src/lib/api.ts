@@ -22,7 +22,9 @@ function baseUrl(): string {
   if (override) return override.replace(/\/$/, '');
   if (Platform.OS === 'web') return '';
   const hostUri = Constants.expoConfig?.hostUri;
-  if (hostUri) return `http://${hostUri.split(':')[0]}:8081`;
+  // The dev server serves the API routes too. Keep its exact host and port:
+  // `192.168.x.x:8082` on LAN, or a tunnel host like `abc.exp.direct` (no port).
+  if (hostUri) return `http://${hostUri.replace(/\/+$/, '')}`;
   return 'http://localhost:8081';
 }
 
