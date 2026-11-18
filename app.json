@@ -54,6 +54,13 @@
         {
           "iCloudContainerEnvironment": "Production"
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Council uses your camera so you can photograph notes, documents or screens and attach them to a question.",
+          "recordAudioAndroid": false
+        }
       ]
     ],
     "experiments": {

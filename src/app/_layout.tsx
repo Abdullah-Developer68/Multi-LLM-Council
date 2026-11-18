@@ -74,6 +74,10 @@ function AppNavigator() {
           <Stack.Screen name="settings" />
           <Stack.Screen name="council" />
           <Stack.Screen name="pricing" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen
+            name="camera"
+            options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom', contentStyle: { backgroundColor: '#000' } }}
+          />
         </Stack.Protected>
         <Stack.Protected guard={!signedIn}>
           <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />

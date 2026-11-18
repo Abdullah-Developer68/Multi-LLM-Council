@@ -1,7 +1,8 @@
+import { router } from 'expo-router';
 import { Camera, Images, Paperclip } from 'lucide-react-native';
 import { Platform, View } from 'react-native';
 
-import { pickDocuments, pickFromCamera, pickFromLibrary } from '@/lib/attachments';
+import { pickDocuments, pickFromLibrary } from '@/lib/attachments';
 import { haptic } from '@/lib/haptics';
 import { useAppStore } from '@/store';
 import { ATTACHMENT_LIMITS } from '@/shared/types';
@@ -41,14 +42,12 @@ export function AttachSheet({ visible, onClose }: { visible: boolean; onClose: (
     onError: (msg: string) => showToast(msg, 'danger'),
   };
 
+  // Opens Council's own camera screen (src/app/camera.tsx) rather than the system
+  // camera app, which some Android devices refuse to resolve from Expo Go.
   const handleCamera = () => {
     haptic.select();
     launchAfterDismiss(async () => {
-      const items = await pickFromCamera({
-        ...callbacks,
-        onDenied: () => showToast('Camera access is off. Enable it in Settings to take a photo.', 'danger'),
-      });
-      if (items.length) addAttachments(items);
+      router.push('/camera');
     });
   };
 

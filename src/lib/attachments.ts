@@ -1,4 +1,3 @@
-import * as Device from 'expo-device';
 import * as DocumentPicker from 'expo-document-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
@@ -76,7 +75,8 @@ async function measureUriBytes(uri: string): Promise<number | null> {
   }
 }
 
-async function prepareImageAsset(
+/** Downscales to ≤1600 px and re-encodes as JPEG (also converts HEIC). */
+export async function prepareImageAsset(
   uri: string,
   preferredName: string,
   fallbackSize?: number,
@@ -129,61 +129,6 @@ export interface PickerCallbacks {
   currentCount: number;
   onLimit: (message: string) => void;
   onError: (message: string) => void;
-}
-
-export async function pickFromCamera(
-  opts: PickerCallbacks & { onDenied: () => void },
-): Promise<NewDraftAttachment[]> {
-  const remaining = ATTACHMENT_LIMITS.maxFiles - opts.currentCount;
-  if (remaining <= 0) {
-    opts.onLimit(`You can attach up to ${ATTACHMENT_LIMITS.maxFiles} files per message.`);
-    return [];
-  }
-
-  // Simulators and most emulators have no usable camera.
-  if (!Device.isDevice) {
-    opts.onError("The camera isn't available in a simulator or emulator. Use Photo library or Files instead.");
-    return [];
-  }
-
-  const perm = await ImagePicker.requestCameraPermissionsAsync();
-  if (!perm.granted) {
-    opts.onDenied();
-    return [];
-  }
-
-  const launch = () => ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 });
-  let result: ImagePicker.ImagePickerResult;
-  try {
-    result = await launch();
-  } catch (first) {
-    // iOS refuses to present the camera while another modal is still on screen
-    // (e.g. the attach sheet finishing its dismissal). Wait and try once more.
-    console.warn('[camera] launch failed, retrying:', first);
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    try {
-      result = await launch();
-    } catch (err) {
-      console.warn('[camera] launch failed:', err);
-      const reason = err instanceof Error && err.message ? ` (${err.message})` : '';
-      opts.onError(`Couldn't open the camera${reason}.`);
-      return [];
-    }
-  }
-  if (result.canceled || !result.assets?.length) return [];
-
-  const asset = result.assets[0];
-  try {
-    const prepared = await prepareImageAsset(asset.uri, cameraPhotoName(), asset.fileSize);
-    if (prepared.size > ATTACHMENT_LIMITS.maxBytes) {
-      opts.onError(`“${prepared.name}” exceeds the 15 MB limit.`);
-      return [];
-    }
-    return [prepared];
-  } catch {
-    opts.onError('Could not process that photo.');
-    return [];
-  }
 }
 
 export async function pickFromLibrary(opts: PickerCallbacks): Promise<NewDraftAttachment[]> {
