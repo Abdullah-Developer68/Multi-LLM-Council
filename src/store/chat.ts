@@ -1,5 +1,5 @@
 import { api, ApiError, streamCouncil } from '@/lib/api';
-import { SEATS } from '@/shared/council';
+import { REFINER, SEATS } from '@/shared/council';
 import type { CouncilEvent, CouncilTurn } from '@/shared/types';
 import type { AppStore, ChatSlice, LiveSeat, LiveTurn, SliceCreator } from './types';
 
@@ -17,7 +17,7 @@ function emptySeats(): Record<string, LiveSeat> {
   return Object.fromEntries(
     SEATS.map((s) => [
       s.id,
-      { seatId: s.id, status: 'waiting', model: s.defaultModel, byName: '', directive: '', text: '', rotations: 0 },
+      { seatId: s.id, status: 'waiting', model: s.defaultModel, text: '', rotations: 0 },
     ]),
   );
 }
@@ -77,11 +77,25 @@ export const createChatSlice: SliceCreator<ChatSlice> = (set, get) => {
       case 'thread':
         set({ live: { ...live, title: event.title } });
         break;
+      case 'refine:start':
+        set({ live: { ...live, refinement: { ...live.refinement, model: event.model } } });
+        break;
+      case 'refine:done':
+        set({
+          live: {
+            ...live,
+            refinement: {
+              status: 'done',
+              model: event.refinement.model,
+              prompt: event.refinement.prompt,
+              refined: event.refinement.refined,
+            },
+          },
+        });
+        break;
       case 'seat:start':
         patchSeat(liveId, event.seatId, () => ({
           model: event.model,
-          byName: event.byName,
-          directive: event.directive,
         }));
         break;
       case 'seat:thinking':
@@ -163,6 +177,7 @@ export const createChatSlice: SliceCreator<ChatSlice> = (set, get) => {
         originThreadId,
         title: get().activeTitle,
         startedAt: Date.now(),
+        refinement: { status: 'refining', model: REFINER.defaultModel },
         seats: emptySeats(),
       };
       controller = new AbortController();

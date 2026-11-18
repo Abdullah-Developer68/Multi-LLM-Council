@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 
-export type AppRoute = '/' | '/council' | '/insights' | '/settings';
+export type AppRoute = '/' | '/council' | '/settings';
 
 /**
  * Moves between the app's top-level screens without piling up history:

@@ -16,6 +16,17 @@ export interface SeatDefinition {
   blurb: string;
 }
 
+export const REFINER: SeatDefinition = {
+  id: 'prompt-refiner',
+  name: 'Prompt Refiner',
+  shortName: 'Refiner',
+  provider: 'Google',
+  providerKey: 'google',
+  defaultModel: 'google/gemma-4-31b-it:free',
+  persona: 'Prompt Engineer',
+  blurb: 'Rewrites prompts for clarity, explicit requirements, structure, and constraints.',
+};
+
 export const SEATS: SeatDefinition[] = [
   {
     id: 'nemotron-lightning',

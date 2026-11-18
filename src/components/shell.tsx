@@ -11,7 +11,7 @@ import { Txt } from './ui/text';
 /**
  * Phone screen frame. `surface="card"` is the chat surface (the design's
  * #141414); `surface="background"` is the near-black ground that grouped
- * cards sit on (settings, status, insights).
+ * cards sit on (settings, status, pricing).
  */
 export function Screen({
   header,

@@ -27,8 +27,9 @@ import type { CouncilTurn } from '@/shared/types';
 import { fonts, makeStyles, radius, springs, useTheme } from '@/theme';
 import { Badge } from '../ui/layout';
 import { Txt } from '../ui/text';
-import { DirectiveInspector } from './directive-inspector';
 import { MarkdownView } from './markdown';
+import { ThinkingIndicator } from './thinking-indicator';
+import { LiveRefinedPrompt, RefinedPrompt } from './refined-prompt';
 import { fromLive, fromResponse, type SeatView } from './seat-view';
 
 /* User message ------------------------------------------------------------- */
@@ -42,29 +43,6 @@ export function UserMessage({ text }: { text: string }) {
           {text}
         </Txt>
       </View>
-    </Animated.View>
-  );
-}
-
-/* Thinking indicator ------------------------------------------------------- */
-
-export function ThinkingIndicator({ label }: { label: string }) {
-  const styles = useStyles();
-  const { colors } = useTheme();
-  const pulse = useSharedValue(1);
-  useEffect(() => {
-    pulse.set(withRepeat(withSequence(withTiming(0.55, { duration: 650 }), withTiming(1, { duration: 650 })), -1));
-  }, [pulse]);
-  const dot = useAnimatedStyle(() => ({ transform: [{ scale: pulse.get() }] }));
-  const text = useAnimatedStyle(() => ({ opacity: 0.45 + (pulse.get() - 0.55) * 1.1 }));
-  return (
-    <Animated.View entering={FadeIn.duration(200)} style={styles.thinking} accessibilityLabel={label}>
-      <Animated.View style={[styles.thinkingDot, { backgroundColor: colors.foreground }, dot]} />
-      <Animated.View style={text}>
-        <Txt variant="callout" tone="secondary">
-          {label}
-        </Txt>
-      </Animated.View>
     </Animated.View>
   );
 }
@@ -229,7 +207,6 @@ function AssistantMessage({
       <GestureDetector gesture={pan}>
         <Animated.View style={dragStyle}>
           <View>
-            {view.byName && view.directive ? <DirectiveInspector byName={view.byName} directive={view.directive} /> : null}
             {view.phase === 'error' ? (
               <View style={[styles.error, { backgroundColor: colors.destructiveSoft }]}>
                 <TriangleAlert size={16} color={colors.destructive} strokeWidth={1.75} style={styles.errorIcon} />
@@ -381,6 +358,7 @@ export function TurnView({ turn }: { turn: CouncilTurn }) {
   return (
     <View style={styles.turn}>
       <UserMessage text={turn.userPrompt} />
+      {turn.refinement ? <RefinedPrompt refinement={turn.refinement} /> : null}
       <AssistantMessage views={turn.agentResponses.map(fromResponse)} selectionKey={turn.turnId} turn={turn} />
       <Consensus turn={turn} />
     </View>
@@ -392,7 +370,10 @@ export function LiveTurnView({ live }: { live: LiveTurn }) {
   return (
     <View style={styles.turn}>
       <UserMessage text={live.prompt} />
-      <AssistantMessage views={Object.values(live.seats).map(fromLive)} selectionKey="live" />
+      <LiveRefinedPrompt refinement={live.refinement} />
+      {live.refinement.status === 'done' ? (
+        <AssistantMessage views={Object.values(live.seats).map(fromLive)} selectionKey="live" />
+      ) : null}
     </View>
   );
 }
@@ -422,8 +403,6 @@ const useStyles = makeStyles((c) => ({
     borderWidth: 1,
   },
   chipText: { fontSize: 12.5 },
-  thinking: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
-  thinkingDot: { width: 10, height: 10, borderRadius: 5 },
   error: { flexDirection: 'row', gap: 10, padding: 12, borderRadius: radius.md },
   errorIcon: { marginTop: 2 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 2, marginLeft: -6 },

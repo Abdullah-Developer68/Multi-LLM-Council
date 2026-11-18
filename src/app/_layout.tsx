@@ -73,7 +73,7 @@ function AppNavigator() {
           <Stack.Screen name="index" options={{ animation: 'fade' }} />
           <Stack.Screen name="settings" />
           <Stack.Screen name="council" />
-          <Stack.Screen name="insights" />
+          <Stack.Screen name="pricing" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         </Stack.Protected>
         <Stack.Protected guard={!signedIn}>
           <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />

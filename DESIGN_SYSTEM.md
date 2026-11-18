@@ -10,7 +10,7 @@ Values live in [`src/theme/tokens.ts`](src/theme/tokens.ts). Components ask for 
 
 | Role | Dark | Light | Use |
 | --- | --- | --- | --- |
-| `background` | `#0A0A0A` | `#F7F7F7` | Ground for grouped screens (settings, status, insights) and the drawer. |
+| `background` | `#0A0A0A` | `#F7F7F7` | Ground for grouped screens (settings, status, pricing) and the drawer. |
 | `card` | `#141414` | `#FFFFFF` | The chat screen surface, cards, list groups, the composer, sheets. |
 | `popover` | `#171717` | `#FFFFFF` | Toasts. |
 | `muted` | `#212121` | `#F2F2F2` | Hover, the active row, the user bubble, icon tiles, skeletons. |
@@ -65,7 +65,7 @@ The design has no brand hue: emphasis comes from the white primary. Each seat ke
 | `Skeleton`, `Progress`, `Alert`, `ToastHost` | `components/ui/feedback.tsx` | |
 | `Sheet` | `components/ui/sheet.tsx` | Bottom sheet with a drag handle. Drag down to dismiss. |
 | `Screen`, `AppHeader`, `BackButton` | `components/shell.tsx` | Safe-area screen frame, the centered 56px header and its back chevron. |
-| `DrawerSidebar` | `components/chat/sidebar.tsx` | Edge-swipe drawer with section tabs, search, new chat, history and an account footer. |
+| `DrawerSidebar` | `components/chat/sidebar.tsx` | Edge-swipe drawer with search, new chat, history and an account footer (Upgrade button and settings gear). |
 | `LogoTile`, `Wordmark` | `components/brand.tsx` | The mark on a primary tile. |
 
 ## Rules

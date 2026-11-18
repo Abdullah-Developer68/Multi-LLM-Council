@@ -1,11 +1,12 @@
 import { eq } from 'drizzle-orm';
 
-import { SEATS } from '../../shared/council';
+import { REFINER, SEATS } from '../../shared/council';
 import type { CouncilEvent, CouncilTurn, SeatResponse, UserAccount } from '../../shared/types';
 import { db } from '../db/client';
 import { chatThreads, multiAgentTurns } from '../db/schema';
 import { listThreadTurns, newId, requireOwnedThread, titleFromPrompt, toCouncilTurn } from '../turns';
-import { buildDirective, peerOf, seatMessages, summarize, type ContextTurn } from './directives';
+import { seatMessages, summarize, type ContextTurn } from './directives';
+import { refinePrompt } from './refiner';
 import { AbortedError, primaryModelFor, runSeat } from './rotation';
 
 const CONTEXT_TURNS = 3;
@@ -33,9 +34,9 @@ async function loadContext(threadId: string): Promise<ContextTurn[]> {
 }
 
 /**
- * Runs one council turn: three seats answer concurrently, each from a
- * directive written by its ring peer. Tokens stream out as events; the turn
- * is persisted once at least one seat has answered.
+ * Runs one council turn: the Prompt Refiner rewrites the prompt once, then all
+ * three seats answer concurrently from that refined prompt. Tokens stream out
+ * as events; the turn is persisted once at least one seat has answered.
  */
 export async function runCouncil(req: CouncilRequest): Promise<CouncilTurn> {
   const started = Date.now();
@@ -48,16 +49,16 @@ export async function runCouncil(req: CouncilRequest): Promise<CouncilTurn> {
 
   const context = existing && req.useContext ? await loadContext(existing.id) : [];
 
+  emit({ type: 'refine:start', model: await primaryModelFor(REFINER.id) });
+  const refinement = await refinePrompt({ prompt, context, signal });
+  emit({ type: 'refine:done', refinement });
+
   const responses = await Promise.all(
-    SEATS.map(async (seat, index): Promise<SeatResponse> => {
-      const author = peerOf(index);
-      const directive = buildDirective(author, prompt, context);
+    SEATS.map(async (seat): Promise<SeatResponse> => {
       const base = {
         agentId: seat.id,
         agentName: seat.name,
-        optimizedByAgentId: author.id,
-        optimizedByAgentName: author.name,
-        receivedPrompt: directive,
+        receivedPrompt: refinement.prompt,
       };
 
       const primary = await primaryModelFor(seat.id);
@@ -65,9 +66,6 @@ export async function runCouncil(req: CouncilRequest): Promise<CouncilTurn> {
         type: 'seat:start',
         seatId: seat.id,
         model: primary,
-        byId: author.id,
-        byName: author.name,
-        directive,
       });
 
       let response: SeatResponse;
@@ -75,7 +73,7 @@ export async function runCouncil(req: CouncilRequest): Promise<CouncilTurn> {
         const result = await runSeat({
           seatId: seat.id,
           seatName: seat.name,
-          messages: seatMessages(seat, author, directive),
+          messages: seatMessages(seat, refinement.prompt),
           signal,
           onEvent: (event) => {
             if (event.type === 'delta') emit({ type: 'seat:delta', seatId: seat.id, text: event.text });
@@ -126,7 +124,13 @@ export async function runCouncil(req: CouncilRequest): Promise<CouncilTurn> {
       id: newId('turn'),
       threadId,
       userPrompt: prompt,
-      optimizedPrompt: responses[0]?.receivedPrompt ?? prompt,
+      optimizedPrompt: refinement.prompt,
+      optimizationDetails: {
+        model: refinement.model,
+        latencyMs: refinement.latencyMs,
+        refined: refinement.refined,
+        ...(refinement.error ? { error: refinement.error } : {}),
+      },
       consensusSolution: '',
       agentResponses: responses,
       rankedAgentIds: SEATS.map((s) => s.id),

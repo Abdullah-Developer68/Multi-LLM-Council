@@ -1,13 +1,15 @@
 import Constants from 'expo-constants';
-import { ChartColumn, Cpu, Layers, LogOut, Monitor, Moon, ShieldOff, Sun, Vibrate } from 'lucide-react-native';
-import { useState } from 'react';
-import { Platform, Pressable, ScrollView, View } from 'react-native';
+import { router } from 'expo-router';
+import { Cpu, Layers, LogOut, Monitor, Moon, ShieldOff, Sparkles, Sun, Vibrate } from 'lucide-react-native';
+import { useCallback, useState } from 'react';
+import { Platform, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
+import { InsightsPanel } from '@/components/insights-panel';
 import { AppHeader, BackButton, Screen } from '@/components/shell';
 import { Button } from '@/components/ui/button';
 import { Segmented, Toggle } from '@/components/ui/controls';
-import { Card, Divider, ListGroup, ListItem, SectionHeader } from '@/components/ui/layout';
+import { Badge, Card, Divider, ListGroup, ListItem, SectionHeader } from '@/components/ui/layout';
 import { TextField } from '@/components/ui/text-field';
 import { Txt } from '@/components/ui/text';
 import { initials } from '@/lib/format';
@@ -36,7 +38,18 @@ export default function SettingsScreen() {
   const [name, setName] = useState(user?.fullName ?? '');
   const [saving, setSaving] = useState(false);
   const [confirmEverywhere, setConfirmEverywhere] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const dirty = !!name.trim() && name.trim() !== user?.fullName;
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setRefreshKey((k) => k + 1);
+  }, []);
+
+  const onRefreshComplete = useCallback(() => {
+    setRefreshing(false);
+  }, []);
 
   const saveName = async () => {
     if (!dirty || saving) return;
@@ -72,7 +85,11 @@ export default function SettingsScreen() {
         />
       }
     >
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         <Animated.View entering={enter(0)}>
           <Card padded={false}>
             <View style={styles.profile}>
@@ -111,6 +128,22 @@ export default function SettingsScreen() {
         </Animated.View>
 
         <Animated.View entering={enter(1)}>
+          <SectionHeader title="Plan" />
+          <Card style={styles.planCard}>
+            <View style={styles.planTop}>
+              <View style={styles.planHeader}>
+                <Txt variant="headline">Free plan</Txt>
+                <Badge label="Current" variant="secondary" />
+              </View>
+              <Txt variant="caption" tone="secondary">
+                Three free models · prompt refiner · consensus on demand
+              </Txt>
+            </View>
+            <Button label="Upgrade to Pro" icon={Sparkles} fullWidth onPress={() => router.push('/pricing')} />
+          </Card>
+        </Animated.View>
+
+        <Animated.View entering={enter(2)}>
           <SectionHeader title="Appearance" />
           <Segmented<ThemePreference>
             variant="tabs"
@@ -124,7 +157,7 @@ export default function SettingsScreen() {
           />
         </Animated.View>
 
-        <Animated.View entering={enter(2)}>
+        <Animated.View entering={enter(3)}>
           <SectionHeader title="Council" />
           <ListGroup>
             <ListItem
@@ -140,14 +173,18 @@ export default function SettingsScreen() {
               />
             ) : null}
             <ListItem icon={Cpu} title="Council status" value="3 seats" onPress={() => navigateTo('/settings', '/council')} />
-            <ListItem icon={ChartColumn} title="Insights" onPress={() => navigateTo('/settings', '/insights')} />
           </ListGroup>
           <Txt variant="caption" tone="secondary" style={styles.footnote}>
             Memory sends a summary of the last three turns with each follow-up so the council keeps context.
           </Txt>
         </Animated.View>
 
-        <Animated.View entering={enter(3)}>
+        <Animated.View entering={enter(4)}>
+          <SectionHeader title="Insights" />
+          <InsightsPanel refreshKey={refreshKey} onRefreshComplete={onRefreshComplete} />
+        </Animated.View>
+
+        <Animated.View entering={enter(5)}>
           <ListGroup>
             <ListItem icon={LogOut} title="Sign out" onPress={() => signOut()} />
             <ListItem title="Sign out of all devices" destructive onPress={() => setConfirmEverywhere(true)} />
@@ -184,6 +221,9 @@ const useStyles = makeStyles(() => ({
   profile: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 },
   avatar: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
   nameField: { padding: 16 },
+  planCard: { gap: 16 },
+  planTop: { gap: 4 },
+  planHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   footnote: { marginTop: 8, paddingHorizontal: 4 },
   confirm: { gap: 12, padding: 14, borderRadius: radius.lg, marginTop: 12 },
   confirmText: { flexDirection: 'row', gap: 10 },

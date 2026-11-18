@@ -1,5 +1,5 @@
-import { usePathname } from 'expo-router';
-import { ChartColumn, Cpu, EllipsisVertical, MessageSquare, Pin, Plus, Search, Settings, X } from 'lucide-react-native';
+import { router, usePathname } from 'expo-router';
+import { EllipsisVertical, MessageSquare, Pin, Plus, Search, Settings, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Pressable, SectionList, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
@@ -13,8 +13,7 @@ import { navigateTo, type AppRoute } from '@/lib/nav';
 import { useAppStore } from '@/store';
 import type { ThreadSummary } from '@/shared/types';
 import { control, fonts, layout, makeStyles, radius, springs, useTheme } from '@/theme';
-import { IconButton } from '../ui/button';
-import { Segmented } from '../ui/controls';
+import { Button, IconButton } from '../ui/button';
 import { Skeleton } from '../ui/feedback';
 import { Avatar } from '../ui/layout';
 import { Txt } from '../ui/text';
@@ -80,7 +79,7 @@ function ThreadRow({
   );
 }
 
-/** Drawer body: brand, section tabs, search + new chat, grouped history, account footer. */
+/** Drawer body: brand, search + new chat, grouped history, account footer. */
 function DrawerContent({ onClose }: { onClose: () => void }) {
   const styles = useStyles();
   const { colors } = useTheme();
@@ -119,16 +118,6 @@ function DrawerContent({ onClose }: { onClose: () => void }) {
         <Wordmark />
         <IconButton icon={X} label="Close sidebar" onPress={onClose} color={colors.mutedForeground} />
       </View>
-
-      <Segmented<AppRoute>
-        value="/"
-        onChange={(path) => go(path)}
-        options={[
-          { value: '/', icon: MessageSquare, label: 'Chats' },
-          { value: '/council', icon: Cpu, label: 'Status' },
-          { value: '/insights', icon: ChartColumn, label: 'Insights' },
-        ]}
-      />
 
       <View style={styles.searchRow}>
         <View style={[styles.search, { borderColor: searchFocused ? colors.ring : colors.input }]}>
@@ -218,14 +207,23 @@ function DrawerContent({ onClose }: { onClose: () => void }) {
 
       <View style={[styles.footer, { borderTopColor: colors.border }]}>
         <Avatar initials={initials(user?.fullName, user?.email)} />
-        <View style={styles.flex}>
+        <View style={styles.footerUser}>
           <Txt variant="bodyMedium" numberOfLines={1}>
             {user?.fullName ?? 'Account'}
           </Txt>
           <Txt variant="caption" tone="secondary" numberOfLines={1}>
-            {user?.email}
+            Free plan
           </Txt>
         </View>
+        <Button
+          label="Upgrade"
+          size="sm"
+          variant="outline"
+          onPress={() => {
+            onClose();
+            router.push('/pricing');
+          }}
+        />
         <IconButton icon={Settings} label="Settings" onPress={() => go('/settings')} color={colors.mutedForeground} size={36} />
       </View>
 
@@ -337,6 +335,7 @@ const useStyles = makeStyles((c) => ({
   },
   center: { textAlign: 'center' },
   footer: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 12, paddingHorizontal: 4, borderTopWidth: 1 },
+  footerUser: { flex: 1, minWidth: 0 },
   drawer: {
     position: 'absolute',
     top: 0,

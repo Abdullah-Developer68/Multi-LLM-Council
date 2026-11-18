@@ -38,8 +38,16 @@ export interface SeatResponse {
   attempts?: number;
   optimizedByAgentId?: string;
   optimizedByAgentName?: string;
-  /** The directive this seat received from its ring peer. */
+  /** The refined prompt this seat received. */
   receivedPrompt?: string;
+}
+
+export interface TurnRefinement {
+  prompt: string;
+  model: string;
+  latencyMs: number;
+  refined: boolean;
+  error?: string;
 }
 
 export interface TurnSynthesis {
@@ -55,6 +63,7 @@ export interface CouncilTurn {
   userPrompt: string;
   agentResponses: SeatResponse[];
   preferredAgentId: string | null;
+  refinement: TurnRefinement | null;
   synthesis: TurnSynthesis | null;
   elapsedMs: number | null;
   /** How many earlier turns were fed to the council as context. */
@@ -65,7 +74,9 @@ export interface CouncilTurn {
 /** Events streamed (as NDJSON) from `POST /api/council`. */
 export type CouncilEvent =
   | { type: 'thread'; threadId: string; title: string; created: boolean }
-  | { type: 'seat:start'; seatId: string; model: string; byId: string; byName: string; directive: string }
+  | { type: 'refine:start'; model: string }
+  | { type: 'refine:done'; refinement: TurnRefinement }
+  | { type: 'seat:start'; seatId: string; model: string }
   | { type: 'seat:thinking'; seatId: string }
   | { type: 'seat:rotate'; seatId: string; model: string; reason: string }
   | { type: 'seat:delta'; seatId: string; text: string }

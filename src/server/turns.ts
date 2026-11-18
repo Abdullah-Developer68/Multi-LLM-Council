@@ -1,9 +1,23 @@
 import { and, asc, eq } from 'drizzle-orm';
 
-import type { CouncilTurn, ThreadSummary } from '../shared/types';
+import type { CouncilTurn, ThreadSummary, TurnRefinement } from '../shared/types';
 import { db } from './db/client';
 import { chatThreads, multiAgentTurns, type ThreadRow, type TurnRow } from './db/schema';
 import { HttpError } from './http';
+
+function parseRefinement(row: TurnRow): TurnRefinement | null {
+  const details = row.optimizationDetails;
+  if (!details || typeof details !== 'object' || Array.isArray(details)) return null;
+  const d = details as Record<string, unknown>;
+  if (typeof d.model !== 'string') return null;
+  return {
+    prompt: row.optimizedPrompt,
+    model: d.model,
+    latencyMs: typeof d.latencyMs === 'number' ? d.latencyMs : 0,
+    refined: typeof d.refined === 'boolean' ? d.refined : true,
+    ...(typeof d.error === 'string' ? { error: d.error } : {}),
+  };
+}
 
 /** Maps a DB row (v1 or v2) to the client shape. */
 export function toCouncilTurn(row: TurnRow): CouncilTurn {
@@ -19,6 +33,7 @@ export function toCouncilTurn(row: TurnRow): CouncilTurn {
     userPrompt: row.userPrompt,
     agentResponses: responses,
     preferredAgentId: meta.preferredAgentId ?? null,
+    refinement: parseRefinement(row),
     synthesis: meta.synthesis ?? null,
     elapsedMs: meta.elapsedMs ?? null,
     contextTurns: meta.contextTurns ?? 0,

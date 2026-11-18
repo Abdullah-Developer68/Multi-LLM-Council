@@ -41,8 +41,6 @@ export interface LiveSeat {
   seatId: string;
   status: LiveSeatStatus;
   model: string;
-  byName: string;
-  directive: string;
   text: string;
   rotations: number;
   response?: SeatResponse;
@@ -55,6 +53,12 @@ export interface LiveTurn {
   originThreadId: string | null;
   title: string | null;
   startedAt: number;
+  refinement: {
+    status: 'refining' | 'done';
+    model: string;
+    prompt?: string;
+    refined?: boolean;
+  };
   seats: Record<string, LiveSeat>;
 }
 
