@@ -5,7 +5,10 @@ import type { CatalogSlice, ChatSlice, PrefsSlice, SessionSlice, SliceCreator, T
 export { createChatSlice } from './chat';
 
 const CATALOG_STALE_MS = 5 * 60 * 1000;
+const CATALOG_INFLIGHT_STALE_MS = 25 * 1000;
 let catalogFetchedAt = 0;
+let catalogStartedAt = 0;
+let catalogRunId = 0;
 let catalogPromise: Promise<void> | null = null;
 
 function message(err: unknown, fallback: string): string {
@@ -76,6 +79,8 @@ export const createSessionSlice: SliceCreator<SessionSlice> = (set, get) => ({
     get().cancel();
     if (remote) await api.signOut(everywhere).catch(() => {});
     catalogFetchedAt = 0;
+    catalogStartedAt = 0;
+    catalogRunId += 1;
     catalogPromise = null;
     setAuthToken(null);
     set(SIGNED_OUT);
@@ -143,7 +148,9 @@ export const createCatalogSlice: SliceCreator<CatalogSlice> = (set, get) => ({
   loadCatalog: async (opts) => {
     if (!get().token) return;
     const force = opts?.force ?? false;
-    if (catalogPromise && !force) return catalogPromise;
+    if (catalogPromise && !force && Date.now() - catalogStartedAt < CATALOG_INFLIGHT_STALE_MS) {
+      return catalogPromise;
+    }
     const fresh =
       !force &&
       get().catalog !== null &&
@@ -151,20 +158,25 @@ export const createCatalogSlice: SliceCreator<CatalogSlice> = (set, get) => ({
       Date.now() - catalogFetchedAt < CATALOG_STALE_MS;
     if (fresh) return;
 
+    const runId = ++catalogRunId;
+    catalogStartedAt = Date.now();
     set({ catalogStatus: get().catalog ? 'ready' : 'loading' });
     const run = (async () => {
       try {
         const catalog = await api.catalog();
-        if (!get().token) return;
+        if (!get().token || runId !== catalogRunId) return;
         catalogFetchedAt = Date.now();
         const selectedModels = reconcileSelection(get().selectedModels, catalog);
         set({ catalog, catalogStatus: 'ready', selectedModels });
       } catch {
-        if (!get().token) return;
+        if (!get().token || runId !== catalogRunId) return;
         set({ catalogStatus: get().catalog ? 'ready' : 'error' });
       }
     })().finally(() => {
-      if (catalogPromise === run) catalogPromise = null;
+      if (catalogPromise === run) {
+        catalogPromise = null;
+        catalogStartedAt = 0;
+      }
     });
     catalogPromise = run;
     return run;

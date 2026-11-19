@@ -56,24 +56,72 @@ function headers(): Record<string, string> {
   return h;
 }
 
-async function request<T>(path: string, init: { method?: string; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
-  let res: Response;
-  try {
-    res = await fetch(`${baseUrl()}${path}`, {
-      method: init.method ?? 'GET',
-      headers: headers(),
-      body: init.body === undefined ? undefined : JSON.stringify(init.body),
-      signal: init.signal,
-    });
-  } catch (err) {
-    if ((err as Error)?.name === 'AbortError') throw err;
-    throw new ApiError(0, 'Could not reach the server. Check your connection and try again.');
+const REQUEST_TIMEOUT_MS = 20_000;
+
+async function request<T>(
+  path: string,
+  init: { method?: string; body?: unknown; signal?: AbortSignal; timeoutMs?: number } = {},
+): Promise<T> {
+  const controller = new AbortController();
+  let timedOut = false;
+  let callerAborted = false;
+
+  const onCallerAbort = () => {
+    callerAborted = true;
+    controller.abort();
+  };
+
+  if (init.signal?.aborted) {
+    callerAborted = true;
+    controller.abort();
+  } else {
+    init.signal?.addEventListener('abort', onCallerAbort, { once: true });
   }
 
-  const data = await res.json().catch(() => ({}));
+  const timer = setTimeout(() => {
+    if (!callerAborted) {
+      timedOut = true;
+      controller.abort();
+    }
+  }, init.timeoutMs ?? REQUEST_TIMEOUT_MS);
+
+  let res: Response;
+  let data: unknown;
+  try {
+    try {
+      res = await fetch(`${baseUrl()}${path}`, {
+        method: init.method ?? 'GET',
+        headers: headers(),
+        body: init.body === undefined ? undefined : JSON.stringify(init.body),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (callerAborted) throw err;
+      if (timedOut) {
+        throw new ApiError(0, 'The server took too long to respond. Check your connection and try again.');
+      }
+      if ((err as Error)?.name === 'AbortError') throw err;
+      throw new ApiError(0, 'Could not reach the server. Check your connection and try again.');
+    }
+
+    try {
+      data = await res.json();
+    } catch (err) {
+      if (callerAborted) throw err;
+      if (timedOut) {
+        throw new ApiError(0, 'The server took too long to respond. Check your connection and try again.');
+      }
+      data = {};
+    }
+  } finally {
+    clearTimeout(timer);
+    init.signal?.removeEventListener('abort', onCallerAbort);
+  }
+
   if (!res.ok) {
     if (res.status === 401 && authToken) onUnauthorized?.();
-    throw new ApiError(res.status, data?.error ?? `Request failed (${res.status}).`);
+    const error = (data as { error?: string } | null)?.error;
+    throw new ApiError(res.status, error ?? `Request failed (${res.status}).`);
   }
   return data as T;
 }

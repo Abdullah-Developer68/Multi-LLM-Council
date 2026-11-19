@@ -151,7 +151,10 @@ function normalizeDescription(raw: string | undefined, name: string, companyName
 
   // Use the first sentence that describes the model, skipping editorial
   // asides such as "Note: …" / "See details here." that some listings start with.
-  const sentences = text.match(/[^.!?]+[.!?]+(?=\s|$)/g)?.map((s) => s.trim()) ?? [];
+  const sentences = text
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
   const useful = sentences.find((s) => !/^(note|see|exclusively available|disclaimer)\b/i.test(s) && s.length > 12);
   if (useful && !useful.endsWith('..')) {
     text = useful;
